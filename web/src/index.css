@@ -1,0 +1,848 @@
+:root{
+  --paper:#f5f7fb; --card:#ffffff; --ink:#151d2c; --muted:#6c7a92;
+  --line:#e9edf4; --line-2:#dbe2ec; --field:#f4f7fb;
+  --brand:#3f63e0; --brand-2:#5b7cf0; --brand-bg:#eef2ff; --brand-line:#d8e0fd;
+  --sidebar:#ffffff; --sidebar-ink:#5b6880; --sidebar-active:#eef2ff;
+  --slate:#3f63e0;
+  --pass:#0e9b6d; --pass-bg:#e7f7f1; --pass-line:#bde9d8;
+  --amber:#b4741a; --amber-bg:#fdf3e2; --amber-line:#f0dcb4;
+  --fail:#d0453c; --fail-bg:#fdeeec; --fail-line:#f6cdc8;
+  --law:#7048c9; --law-bg:#f1ecfd; --law-line:#ddd0f7;
+  --radius:14px;
+  --shadow:0 1px 2px rgba(16,24,40,.04),0 6px 20px rgba(16,24,40,.05);
+  --shadow-sm:0 1px 2px rgba(16,24,40,.05);
+}
+*{box-sizing:border-box}
+html,body,#root{height:100%}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Apple SD Gothic Neo","Pretendard","Malgun Gothic","Segoe UI",-apple-system,sans-serif;
+  font-size:14px;line-height:1.55;-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+.mono{font-family:"SF Mono","JetBrains Mono","Consolas",ui-monospace,monospace}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;color:var(--ink)}
+
+/* layout */
+.shell{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
+.sidebar{background:var(--sidebar);color:var(--sidebar-ink);display:flex;flex-direction:column;
+  border-right:1px solid var(--line);position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:11px;padding:20px 20px 18px}
+.brand .mk{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--brand),var(--brand-2));
+  display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px;
+  box-shadow:0 4px 10px rgba(63,99,224,.28)}
+.brand b{color:var(--ink);font-size:15.5px;font-weight:800;letter-spacing:-.01em}
+.brand span{display:block;font-size:10.5px;color:var(--muted);margin-top:-2px;font-weight:600}
+.nav{padding:6px 12px;display:flex;flex-direction:column;gap:2px}
+.nav .sec{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#9aa6bb;padding:14px 10px 6px;font-weight:800}
+.nav a{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;
+  color:var(--sidebar-ink);font-weight:600;font-size:13.5px;transition:background .12s,color .12s}
+.nav a:hover{background:var(--field);color:var(--ink)}
+.nav a.on{background:var(--sidebar-active);color:var(--brand);font-weight:700}
+.nav a .ic{width:18px;text-align:center;font-size:13px}
+.side-foot{margin-top:auto;margin:auto 12px 14px;padding:14px;border-radius:12px;
+  background:var(--field);border:1px solid var(--line);font-size:11px;color:var(--muted);line-height:1.6}
+
+.main{display:flex;flex-direction:column;min-width:0}
+.topbar{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--card) 92%,transparent);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding-block:13px;
+  padding-inline:calc(max(0px,(100% - 1440px)/2) + 30px);display:flex;align-items:center;gap:16px}
+.topbar h1{font-size:18px;margin:0;font-weight:800;letter-spacing:-.015em;line-height:1.25}
+.tb-head{min-width:0}
+.tb-head .sub{font-size:11.5px;color:var(--muted);margin-top:1px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:9px}
+.tb-stats{display:flex;gap:7px}
+@media(max-width:1180px){.tb-stats{display:none}}
+.tb-stat{display:inline-flex;align-items:baseline;gap:5px;padding:6px 11px;border-radius:9px;
+  background:var(--field);border:1px solid var(--line);font-size:11px;color:var(--muted);font-weight:600;
+  transition:border-color .12s}
+.tb-stat b{font-size:13px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+.tb-stat:hover{border-color:var(--brand)}
+.tb-div{width:1px;height:24px;background:var(--line)}
+.tb-bell{position:relative;display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--card);
+  color:var(--muted);font-size:15px;transition:border-color .12s,color .12s}
+.tb-bell:hover{border-color:var(--brand);color:var(--brand)}
+.tb-bell.has{color:var(--fail);border-color:var(--fail-line);background:var(--fail-bg)}
+.tb-bell .n{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 4px;
+  border-radius:9px;background:var(--fail);color:#fff;font-size:10px;font-weight:800;
+  display:inline-flex;align-items:center;justify-content:center;border:2px solid var(--card)}
+.provider-pill{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;
+  padding:7px 13px;border-radius:20px;border:1px solid}
+.provider-pill i{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.provider-pill em{font-style:normal;font-weight:600;opacity:.72}
+.provider-pill.safe{color:var(--pass);background:var(--pass-bg);border-color:var(--pass-line)}
+.provider-pill.cloud{color:var(--amber);background:var(--amber-bg);border-color:var(--amber-line)}
+.content{padding:26px 30px 72px;max-width:1440px;width:100%;margin-inline:auto}
+
+/* cards */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.card-h{padding:17px 20px 15px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.card-h h2{font-size:15px;margin:0;font-weight:800;letter-spacing:-.01em}
+.card-h .sub{font-size:11.5px;color:var(--muted);font-weight:500;margin-top:2px}
+.card-h .tag{font-size:11px;color:var(--muted);margin-left:auto;font-weight:600}
+.card-b{padding:20px}
+.grid{display:grid;gap:16px}
+.g-4{grid-template-columns:repeat(4,1fr)}@media(max-width:900px){.g-4{grid-template-columns:repeat(2,1fr)}}
+.g-2{grid-template-columns:1fr 1fr}@media(max-width:900px){.g-2{grid-template-columns:1fr}}
+.lead{font-size:13px;color:var(--muted);margin:0 0 14px}.lead b{color:var(--ink);font-weight:700}
+
+/* stat cards — 아이콘 배지 + 수치 */
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  box-shadow:var(--shadow);padding:18px;display:flex;flex-direction:column;gap:13px}
+.stat .ic{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+  font-size:16px;background:var(--brand-bg);color:var(--brand)}
+.stat .n{font-size:27px;font-weight:800;letter-spacing:-.025em;line-height:1.1}
+.stat .l{font-size:12.5px;color:var(--muted);margin-top:3px;font-weight:600}
+.stat.pass .ic{background:var(--pass-bg);color:var(--pass)}
+.stat.amber .ic{background:var(--amber-bg);color:var(--amber)}
+.stat.law .ic{background:var(--law-bg);color:var(--law)}
+
+/* quick action tiles */
+.qa{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}
+@media(max-width:900px){.qa{grid-template-columns:repeat(2,1fr)}}
+.qa .t{border-radius:13px;padding:16px;display:flex;flex-direction:column;gap:11px;
+  border:1px solid var(--line);background:var(--field);transition:transform .12s,box-shadow .12s}
+.qa .t:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.qa .t .ic{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px}
+.qa .t b{font-size:13.5px;font-weight:700;display:block}
+.qa .t span{font-size:11.5px;color:var(--muted);display:block;margin-top:2px}
+.qa .t.b1{background:var(--brand-bg);border-color:var(--brand-line)} .qa .t.b1 .ic{background:#fff;color:var(--brand)}
+.qa .t.b2{background:var(--law-bg);border-color:var(--law-line)}     .qa .t.b2 .ic{background:#fff;color:var(--law)}
+.qa .t.b3{background:var(--pass-bg);border-color:var(--pass-line)}   .qa .t.b3 .ic{background:#fff;color:var(--pass)}
+.qa .t.b4{background:var(--amber-bg);border-color:var(--amber-line)} .qa .t.b4 .ic{background:#fff;color:var(--amber)}
+
+/* buttons */
+.btn{border:1px solid var(--line-2);background:var(--card);color:var(--ink);font-size:13.5px;font-weight:700;
+  padding:9px 16px;border-radius:10px;display:inline-flex;align-items:center;gap:7px;
+  white-space:nowrap;   /* 좁은 칸에서 '적용'이 두 줄로 접히던 문제 */
+  transition:border-color .12s,background .12s,box-shadow .12s}
+.btn:hover{border-color:var(--brand);color:var(--brand)}
+.btn.primary{background:var(--brand);color:#fff;border-color:var(--brand);box-shadow:0 3px 10px rgba(63,99,224,.24)}
+.btn.primary:hover{background:var(--brand-2);border-color:var(--brand-2);color:#fff}
+.btn.pass{background:var(--pass);color:#fff;border-color:var(--pass)}
+.btn.pass:hover{color:#fff;filter:brightness(1.06)}
+.btn.sm{padding:7px 12px;font-size:12px;border-radius:9px}
+.btn.ghost{background:transparent}
+/* 승인처럼 '긍정이지만 주된 동작은 아닌' 버튼 — primary 보다 약하고 ghost 보다 눈에 띈다 */
+.btn.ok{color:var(--pass);background:var(--pass-bg);border-color:var(--pass-line)}
+.btn.ok:hover{color:var(--pass);background:#dcf2e9;border-color:var(--pass)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* forms */
+.fld{width:100%;background:var(--card);border:1px solid var(--line-2);border-radius:10px;padding:10px 12px;font-size:13.5px}
+.fld:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 14%,transparent)}
+.flabel{font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:800;color:var(--muted);margin:0 0 6px;display:block}
+textarea.fld{min-height:220px;resize:vertical;line-height:1.65}
+
+.drop{border:1.5px dashed var(--line-2);border-radius:13px;padding:26px;text-align:center;background:var(--field);margin-bottom:16px}
+.drop.drag{border-color:var(--brand);background:var(--brand-bg)}
+.drop .fbtn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line-2);background:var(--card);
+  border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;box-shadow:var(--shadow-sm)}
+.drop .fname{font-size:12px;color:var(--muted);margin-top:10px}
+
+/* badges */
+.pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;border:1px solid}
+.pill.draft{color:var(--amber);border-color:var(--amber-line);background:var(--amber-bg)}
+.pill.published,.pill.approved{color:var(--pass);border-color:var(--pass-line);background:var(--pass-bg)}
+.chip{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px;background:var(--brand-bg);color:var(--brand)}
+.chip.none{background:var(--amber-bg);color:var(--amber)}
+
+table.tbl{width:100%;border-collapse:collapse;font-size:13px}
+table.tbl th{text-align:left;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
+  font-weight:800;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--field)}
+table.tbl td{padding:13px 14px;border-bottom:1px solid var(--line)}
+table.tbl tr:hover td{background:var(--field)}
+.sev{font-size:11px;font-weight:700;border:1px solid;border-radius:7px;padding:3px 7px}
+.sev.HIGH{color:var(--fail);border-color:var(--fail-line);background:var(--fail-bg)}
+.sev.MEDIUM{color:var(--amber);border-color:var(--amber-line);background:var(--amber-bg)}
+.sev.LOW{color:var(--muted);border-color:var(--line-2);background:var(--field)}
+
+/* rule editor */
+.rule{border:1px solid var(--line);border-radius:13px;background:var(--card);overflow:hidden;margin-bottom:12px;box-shadow:var(--shadow-sm)}
+.rule.approved{border-color:var(--pass-line)}
+.rule-top{display:flex;align-items:center;gap:10px;padding:13px 16px;cursor:pointer}
+.rule.open .rule-top{border-bottom:1px solid var(--line)}
+.rule-top .idx{font-size:12px;font-weight:800;color:var(--muted)}
+.rule-top .ti{flex:1;font-size:14px;font-weight:700;background:transparent;border:0;padding:5px 7px;border-radius:7px}
+.rule-top .ti:focus{outline:none;background:var(--field)}
+.rule-body{padding:0;display:none}.rule.open .rule-body{display:block}
+.prov{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--line)}
+@media(max-width:700px){.prov{grid-template-columns:1fr}}
+.prov>div{padding:14px 16px}
+.prov .internal{border-right:1px solid var(--line)}
+.prov .plabel{font-size:10px;letter-spacing:.07em;text-transform:uppercase;font-weight:800;margin-bottom:6px}
+.prov .internal .plabel{color:var(--brand)} .prov .law .plabel{color:var(--law)}
+.prov .ptext{font-size:12.5px}
+.prov .law .ptext{background:var(--law-bg);border:1px solid var(--law-line);border-radius:9px;padding:8px 10px;color:var(--law)}
+.aibadge{font-size:9px;font-weight:800;color:var(--law);background:var(--law-bg);border:1px solid var(--law-line);
+  border-radius:5px;padding:1px 6px;margin-left:5px}
+.kwrap{padding:14px 16px}
+.mini{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:800;color:var(--muted);margin:0 0 6px}
+textarea.know{width:100%;min-height:150px;resize:vertical;background:var(--field);border:1px solid var(--line);
+  border-radius:10px;padding:11px;font-size:12px;line-height:1.6}
+textarea.know:focus{outline:none;border-color:var(--brand)}
+.rule-acts{display:flex;gap:8px;padding:0 16px 14px}
+
+pre.json{background:#111a29;color:#d7e0ec;border-radius:12px;padding:16px;font-size:11.5px;line-height:1.55;
+  overflow:auto;max-height:520px;white-space:pre;margin:0}
+.detbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px;background:var(--pass-bg);
+  border:1px solid var(--pass-line);border-radius:13px;margin-bottom:16px}
+.detbar .k{font-size:11px;letter-spacing:.07em;text-transform:uppercase;font-weight:800;color:var(--pass)}
+.detbar .v{font-size:15px;font-weight:800}
+.detbar .r{font-size:11.5px;color:var(--muted);margin-left:auto}
+.warn{padding:12px 15px;border-radius:11px;background:var(--amber-bg);border:1px solid var(--amber-line);
+  color:var(--amber);font-size:12.5px;margin-bottom:14px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.spacer{flex:1}
+.muted{color:var(--muted)}
+
+/* ── 법령/승인/이력 추가분 ── */
+.navbadge{margin-left:auto;font-size:10.5px;font-weight:800;min-width:18px;height:18px;padding:0 5px;
+  border-radius:9px;background:var(--fail);color:#fff;display:inline-flex;align-items:center;justify-content:center}
+pre.diff{background:var(--field);border:1px solid var(--line);border-radius:8px;padding:10px 11px;
+  font-size:11.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;margin:0;
+  font-family:"SF Mono","Consolas",ui-monospace,monospace}
+pre.diff.old{background:var(--fail-bg);border-color:var(--fail-line)}
+pre.diff.new{background:var(--pass-bg);border-color:var(--pass-line)}
+
+/* ── RS API 탐색기 ─────────────────────────────────────────── */
+.seg{display:inline-flex;background:var(--field);border:1px solid var(--line);border-radius:11px;padding:3px;gap:3px}
+.seg button{border:0;background:transparent;color:var(--muted);font-size:12.5px;font-weight:700;
+  padding:7px 14px;border-radius:8px;transition:background .12s,color .12s}
+.seg button:hover{color:var(--ink)}
+.seg button.on{background:var(--card);color:var(--brand);box-shadow:var(--shadow-sm)}
+/* 툴바용 축소판 — 검색창(34px)과 높이를 맞춘다 */
+.seg.sm{border-radius:9px;padding:2px}
+.seg.sm button{font-size:12px;padding:5px 11px;border-radius:7px}
+
+.epdesc{margin:0 0 14px;font-size:12.5px;line-height:1.6;color:var(--muted)}
+
+.tagpick{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.tagpick button{font-size:10.5px;font-weight:700;padding:4px 9px;border-radius:6px;
+  border:1px solid var(--line-2);background:var(--card);color:var(--muted);font-family:inherit}
+.tagpick button:hover{border-color:var(--brand);color:var(--brand)}
+.tagpick button.on{background:var(--brand);border-color:var(--brand);color:#fff}
+
+.reqbox{background:#111a29;border-radius:11px;padding:13px 15px;margin-bottom:14px}
+.reqbox .line{font-size:11.5px;font-family:"SF Mono","Consolas",ui-monospace,monospace;color:#8fa3c4;margin-bottom:7px}
+.reqbox .line b{color:#7ee3b5;font-weight:700}
+.reqbox pre{margin:0;font-size:11.5px;line-height:1.5;color:#d7e0ec;white-space:pre-wrap;word-break:break-word}
+
+.resbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 20px;border-bottom:1px solid var(--line)}
+.resbar .code{font-size:11px;font-weight:800;padding:4px 10px;border-radius:20px;border:1px solid}
+.resbar .code.ok{color:var(--pass);background:var(--pass-bg);border-color:var(--pass-line)}
+.resbar .code.err{color:var(--fail);background:var(--fail-bg);border-color:var(--fail-line)}
+.resbar .m{font-size:11.5px;color:var(--muted)}
+.resbar .m b{color:var(--ink);font-weight:700}
+
+/* grid/flex 자식은 기본 min-width:auto라 내용만큼 늘어난다.
+   긴 JSON 한 줄이 카드·본문·body를 통째로 밀어내 가로 스크롤이 생기던 문제. */
+.grid>*,.main,.content{min-width:0}
+pre.json{white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}
+
+/* ── 각진 데이터 테이블 (룰셋 목록) ────────────────────────── */
+.card.sharp{border-radius:0}
+.card.sharp .card-h{border-radius:0}
+table.tbl.sharp{border-top:1px solid var(--line-2)}
+table.tbl.sharp th{background:var(--field);border-bottom:1px solid var(--line-2);
+  border-right:1px solid var(--line);padding:10px 13px;text-transform:none;letter-spacing:.02em;font-size:11.5px}
+table.tbl.sharp th:last-child{border-right:0}
+table.tbl.sharp td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);
+  padding:10px 13px;vertical-align:middle}
+table.tbl.sharp td:last-child{border-right:0}
+table.tbl.sharp tr:last-child td{border-bottom:0}
+table.tbl.sharp .pill,table.tbl.sharp .chip{border-radius:3px}
+table.tbl.sharp .btn{border-radius:4px}
+.tcell{line-height:1.35}
+.tcell .sub{font-size:11px;color:var(--muted);margin-top:1px}
+
+/* 각진 테이블: 배지·날짜·액션은 줄바꿈되면 행 높이가 들쭉날쭉해진다 */
+table.tbl.sharp td .pill,table.tbl.sharp td .chip,table.tbl.sharp td .btn{white-space:nowrap}
+table.tbl.sharp td.nw,table.tbl.sharp th.nw{white-space:nowrap}
+table.tbl.sharp td.acts{white-space:nowrap;text-align:right}
+table.tbl.sharp td.acts .btn{padding:5px 9px;font-size:11.5px}
+
+/* ── 데이터 테이블 (레퍼런스형: 가로 라인만, 배지·케밥·페이지네이션) ── */
+table.tbl.rows{border-collapse:separate;border-spacing:0}
+table.tbl.rows th{background:var(--field);color:var(--muted);font-size:11.5px;font-weight:800;
+  letter-spacing:.01em;text-transform:none;padding:12px 14px;border-bottom:1px solid var(--line);
+  border-top:1px solid var(--line);white-space:nowrap}
+table.tbl.rows td{padding:13px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.tbl.rows tbody tr:last-child td{border-bottom:0}
+table.tbl.rows tbody tr:hover td{background:color-mix(in srgb,var(--field) 60%,transparent)}
+table.tbl.rows .idlink{font-weight:700;color:var(--brand);font-size:12.5px;white-space:nowrap}
+
+/* 상태 배지 — 점 + 라벨 */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:800;
+  padding:4px 10px;border-radius:20px;border:1px solid;white-space:nowrap}
+.badge i{width:5px;height:5px;border-radius:50%;background:currentColor;display:block}
+.badge.published{color:var(--pass);background:var(--pass-bg);border-color:var(--pass-line)}
+.badge.draft{color:var(--amber);background:var(--amber-bg);border-color:var(--amber-line)}
+
+/* 날짜 2줄 셀 */
+.dt{white-space:nowrap;line-height:1.3}
+.dt b{font-weight:700;font-size:12px;display:block}
+.dt span{font-size:11px;color:var(--muted)}
+
+/* 케밥 메뉴 */
+.kebab{position:relative;text-align:right}
+.kebab>button{border:1px solid transparent;background:transparent;border-radius:8px;padding:4px 9px;
+  font-size:16px;line-height:1;color:var(--muted)}
+.kebab>button:hover{background:var(--field);border-color:var(--line);color:var(--ink)}
+.kmenu{position:absolute;right:10px;top:36px;z-index:20;min-width:132px;background:var(--card);
+  border:1px solid var(--line-2);border-radius:11px;box-shadow:0 8px 26px rgba(16,24,40,.14);padding:5px;text-align:left}
+.kmenu a,.kmenu button{display:block;width:100%;text-align:left;border:0;background:transparent;
+  padding:8px 11px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--ink);font-family:inherit}
+.kmenu a:hover,.kmenu button:hover{background:var(--field)}
+.kmenu .danger{color:var(--fail)}
+.kmenu .danger:hover{background:var(--fail-bg)}
+
+/* 하단 페이지네이션 바 */
+.tfoot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:13px 16px;border-top:1px solid var(--line)}
+.tfoot .info{font-size:12px;color:var(--muted)}
+.tfoot .pg{display:flex;align-items:center;gap:5px;margin-left:auto}
+.tfoot .pg button{min-width:30px;height:30px;border:1px solid var(--line-2);background:var(--card);
+  border-radius:8px;font-size:12.5px;font-weight:700;color:var(--muted);font-family:inherit;padding:0 8px}
+.tfoot .pg button:hover:not(:disabled){border-color:var(--brand);color:var(--brand)}
+.tfoot .pg button.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.tfoot .pg button:disabled{opacity:.4;cursor:not-allowed}
+.tfoot .rpp{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+.tfoot .rpp select{border:1px solid var(--line-2);border-radius:8px;padding:5px 8px;font-size:12px;
+  background:var(--card);font-weight:700}
+
+/* ── 룰셋 워크스페이스 (마스터-디테일) ── */
+.ws{display:grid;grid-template-columns:300px 1fr;gap:18px;align-items:start}
+@media(max-width:900px){.ws{grid-template-columns:1fr}}
+.ws-rail{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px;position:sticky;top:88px}
+.ws-new{width:100%;border:1px solid var(--brand);background:var(--brand);color:#fff;font-weight:800;font-size:13.5px;padding:11px;border-radius:10px;box-shadow:0 3px 10px rgba(63,99,224,.22)}
+.ws-new:hover{filter:brightness(1.06)}
+.ws-new.on{outline:3px solid var(--brand-bg)}
+.ws-lbl{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;font-weight:800;color:var(--muted);padding:14px 6px 8px}
+.ws-list{display:flex;flex-direction:column;gap:4px;max-height:70vh;overflow:auto}
+.ws-item{text-align:left;border:1px solid transparent;background:transparent;border-radius:10px;padding:10px 11px;cursor:pointer}
+.ws-item:hover{background:var(--field)}
+.ws-item.on{background:var(--brand-bg);border-color:var(--brand-line)}
+.ws-item .t{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-item .m{display:flex;align-items:center;gap:7px;margin-top:4px;font-size:10.5px;color:var(--muted);flex-wrap:wrap}
+.ws-item .m .mono{font-size:10px}
+.ws-item .m .c{margin-left:auto}
+.ws-main{min-width:0}
+.wsbanner{margin:0 20px 0;padding:11px 14px;background:var(--pass-bg);border:1px solid var(--pass-line);border-radius:10px;color:var(--pass);font-size:12.5px;font-weight:600}
+
+/* 룰 테이블(워크스페이스) */
+.rl-tbl td{vertical-align:middle}
+.rl-tbl tr.openrow td{background:var(--brand-bg)}
+.rl-tbl .editrow td{padding:0;background:var(--field)}
+.rl-edit{padding:14px 16px;border-top:1px solid var(--line)}
+.rl-edit .lawline{font-size:12px;color:var(--law);background:var(--law-bg);border:1px solid var(--law-line);border-radius:7px;padding:7px 9px}
+
+/* ── 룰셋 워크스페이스 v2: 상단 셀렉터 + 전체폭 룰 작업면 ── */
+.wsbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;background:var(--card);
+  border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;margin-bottom:16px}
+.wsbar .rsel{border:1px solid var(--line-2);border-radius:10px;padding:9px 12px;font-size:13.5px;
+  font-weight:700;background:var(--card);min-width:300px;max-width:440px}
+.wsbar .meta{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted)}
+
+/* 룰 작업 툴바 (필터·검색) */
+.rl-tools{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line)}
+.rl-tools .srch{border:1px solid var(--line-2);border-radius:9px;padding:7px 11px;font-size:12.5px;min-width:200px}
+.rl-tools .srch:focus{outline:none;border-color:var(--brand)}
+
+/* 선택 일괄 작업 바 */
+.rl-bulk{display:flex;align-items:center;gap:9px;padding:10px 16px;background:var(--brand-bg);
+  border-bottom:1px solid var(--brand-line);font-size:12.5px;font-weight:700;color:var(--brand)}
+
+table.tbl.rl th.ck,table.tbl.rl td.ck{width:38px;padding-right:0}
+table.tbl.rl input[type=checkbox]{width:15px;height:15px;accent-color:var(--brand);cursor:pointer}
+table.tbl.rl tr.on td{background:var(--brand-bg)}
+table.tbl.rl tr.openrow td{background:var(--field);border-bottom:0}
+/* 자동 폭이면 긴 제목의 최소폭 때문에 제목 칸이 안 줄고 표가 화면을 넘는다.
+   폭을 고정해 남는 자리를 제목이 갖게 한다. */
+table.tbl.rl{table-layout:fixed}
+table.tbl.rl td.ttl{font-weight:600;min-width:0}
+table.tbl.rl td .chip{max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+/* 액션 칸 — 폭을 잡지 않으면 '편집'과 '승인'이 줄바꿈돼 세로로 쌓인다 */
+table.tbl.rl th.acts,table.tbl.rl td.acts{width:160px;white-space:nowrap;padding-left:8px}
+.rl-acts{display:flex;justify-content:flex-end;gap:6px}
+.rl-acts .btn{flex:none}
+/* 되돌리기는 파괴적이지 않지만 되돌림이라는 걸 색으로 알린다 */
+.rl-acts .btn.undo{color:var(--muted)}
+.rl-acts .btn.undo:hover{color:var(--amber);border-color:var(--amber-line);background:var(--amber-bg)}
+table.tbl.rl td.ttl .src{font-size:11px;color:var(--muted);font-weight:400;margin-top:2px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:560px}
+
+/* 펼침 편집: 전체폭 2단 (좌 메타 / 우 판단근거) */
+tr.editrow td{padding:0!important;background:var(--field);border-bottom:1px solid var(--line-2)}
+.rl-edit{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:18px;padding:16px 18px}
+@media(max-width:1040px){.rl-edit{grid-template-columns:1fr}}
+.rl-edit .lawline{background:var(--law-bg);border:1px solid var(--law-line);color:var(--law);
+  border-radius:9px;padding:8px 10px;font-size:12px;line-height:1.5}
+.rl-edit .srcbox{background:var(--card);border:1px solid var(--line);border-radius:9px;
+  padding:8px 10px;font-size:12px;line-height:1.5;max-height:120px;overflow:auto}
+.rl-edit textarea{min-height:100%;height:100%}
+.rl-edit .kw{display:flex;flex-direction:column;height:100%}
+.rl-edit .kw textarea{flex:1;min-height:210px}
+
+/* ── 생성 패널: 전체폭 2단 (좌 입력 / 우 옵션·실행) ── */
+.seg.eq{display:flex}
+.seg.eq button{flex:1;text-align:center;white-space:nowrap}
+.cp-grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px;align-items:start}
+@media(max-width:1000px){.cp-grid{grid-template-columns:1fr}}
+.cp-grid .side{display:flex;flex-direction:column}
+.cp-main .drop{margin-bottom:0;min-height:210px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:4px}
+.cp-main textarea.body{min-height:280px;line-height:1.7;resize:vertical}
+.cp-count{font-size:11px;color:var(--muted);text-align:right;margin-top:5px;min-height:15px}
+
+/* RS API — 사이드바에서 고른 대상 룰셋 표시 */
+.tgt{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 14px;margin-bottom:14px;
+  background:var(--brand-bg);border:1px solid var(--brand-line);border-radius:11px;font-size:12.5px}
+.tgt .k{font-size:10px;letter-spacing:.07em;text-transform:uppercase;font-weight:800;color:var(--brand)}
+.tgt .mono{font-size:11.5px;color:var(--brand)}
+
+/* 사이드바 모드 스위치 + 컨텍스트 */
+.modesw{display:flex;gap:5px;margin:0 12px 6px;background:var(--field);border:1px solid var(--line);
+  border-radius:11px;padding:4px}
+.modesw button{flex:1;border:0;background:transparent;color:var(--muted);font-family:inherit;
+  font-size:12.5px;font-weight:700;padding:8px 6px;border-radius:8px}
+.modesw button:hover:not(:disabled){color:var(--ink)}
+.modesw button.on{background:var(--card);color:var(--brand);box-shadow:var(--shadow-sm)}
+.modesw button:disabled{opacity:.45;cursor:not-allowed}
+.navsel{margin:0 12px 8px;width:calc(100% - 24px);border:1px solid var(--line-2);border-radius:9px;
+  padding:8px 10px;font-size:12.5px;font-weight:700;background:var(--card)}
+.navmeta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 14px 10px;font-size:11px;color:var(--muted)}
+.navnote{margin:8px 14px 0;font-size:11px;color:var(--muted);line-height:1.55}
+
+/* RS API — 요청/응답을 좌우로 (위아래로 쌓이면 응답 보려고 스크롤해야 함) */
+.rsx{display:grid;grid-template-columns:minmax(0,460px) minmax(0,1fr);gap:18px;align-items:start}
+@media(max-width:1120px){.rsx{grid-template-columns:1fr}}
+.rsx .req{position:sticky;top:88px}
+.rsx .res pre.json{max-height:none}
+.rsx .empty{display:flex;align-items:center;justify-content:center;min-height:280px;
+  color:var(--muted);font-size:12.5px;text-align:center;padding:24px;line-height:1.7}
+
+/* 요청 칼럼이 좁으면 대상 룰셋 박스가 눌린다 — 최소폭을 준다 */
+.rsx{grid-template-columns:minmax(360px,0.85fr) minmax(0,1.15fr)}
+@media(max-width:1120px){.rsx{grid-template-columns:1fr}}
+/* 대상 룰셋 박스 — 좁아지면 줄바꿈되도록 */
+.tgt{row-gap:4px}
+.tgt b{flex:1 1 auto;min-width:0}
+/* 긴 태그 칩이 칸을 넘지 않도록 */
+.tagpick button{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 복사 확인 툴팁 — 버튼 기준 위(기본) 또는 아래(.below) */
+.copywrap{position:relative;display:inline-flex}
+.copytip{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);
+  z-index:20;pointer-events:none;white-space:nowrap;border-radius:8px;padding:5px 10px;
+  background:var(--ink);color:#fff;font-size:11.5px;font-weight:700;letter-spacing:-.01em;
+  box-shadow:0 4px 12px rgba(16,24,40,.18);animation:tipin .15s ease-out}
+.copytip::after{content:'';position:absolute;left:50%;top:100%;transform:translateX(-50%);
+  border:5px solid transparent;border-top-color:var(--ink)}
+.copytip.below{bottom:auto;top:calc(100% + 8px)}
+.copytip.below::after{top:auto;bottom:100%;border-top-color:transparent;border-bottom-color:var(--ink)}
+.copytip.fail{background:var(--fail)}
+.copytip.fail::after{border-top-color:var(--fail)}
+.copytip.below.fail::after{border-top-color:transparent;border-bottom-color:var(--fail)}
+@keyframes tipin{from{opacity:0;transform:translate(-50%,3px)}to{opacity:1;transform:translate(-50%,0)}}
+
+/* 응답이 오면 카드 상단이 상태바로 바뀐다 — 자리를 미리 잡아 화면이 튀지 않게 한다 */
+.rsx .res .card{min-height:360px;display:flex;flex-direction:column}
+.rsx .res .card-b{flex:1;min-height:0}
+
+/* ── AI 스키마 제안 패널 ── */
+.propbox{margin:0 20px 4px;border:1px solid var(--amber-line);background:var(--amber-bg);border-radius:12px;overflow:hidden}
+.propbox.empty{opacity:.85}
+.prophead{display:flex;align-items:center;gap:9px;padding:11px 14px;cursor:pointer}
+.prophead .ptitle{font-weight:800;font-size:13.5px;color:var(--amber)}
+.prophead .pcount{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--amber);color:#fff;font-size:11.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+.prophead .pcount.zero{background:var(--line-2);color:var(--muted)}
+.prophead .pdesc{font-size:11.5px;color:var(--muted)}
+.prophead .pcar{color:var(--amber);font-size:12px}
+.pempty{padding:0 14px 12px;font-size:12px;color:var(--muted)}
+.plist{display:flex;flex-direction:column;gap:8px;padding:0 12px 12px}
+.pitem{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+.pmain{flex:1;min-width:0}
+.prow1{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.prow1 b{font-size:13.5px}
+.pconcept{font-size:11px;font-weight:700;color:var(--amber);background:var(--amber-bg);border:1px solid var(--amber-line);border-radius:5px;padding:1px 7px}
+.prat{font-size:12px;color:var(--ink);margin-top:6px}
+.pev{font-size:11.5px;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plaw{font-size:11px;color:var(--law);margin-top:3px}
+.pacts{display:flex;flex-direction:column;gap:6px;flex:none}
+
+/* ── 워크스페이스 카드 정렬 보정 ──────────────────────────────
+   카드 안이 [헤더][게시배너][AI제안][툴바][테이블] 순인데,
+   배너·제안만 margin 20px로 안쪽에 들어가 툴바·테이블과 어긋났다.
+   전부 전체폭 밴드로 통일하고 내부 padding으로 여백을 준다. */
+.wsbanner{margin:0;padding:11px 16px;border-radius:0;border:0;border-bottom:1px solid var(--pass-line)}
+.propbox{margin:0;border-radius:0;border:0;border-bottom:1px solid var(--amber-line)}
+.prophead{padding:11px 16px}
+.pempty{padding:0 16px 12px}
+/* 제안이 수십 건이면 패널만 3000px을 넘겨 룰 테이블이 화면 밖으로 밀린다 — 높이를 묶는다 */
+.plist{padding:0 16px 12px;max-height:400px;overflow-y:auto}
+
+/* ── 룰셋별 태그 관리 화면 ─────────────────────────────────────── */
+.tagmgr{display:flex;flex-direction:column;gap:16px}
+/* 그리드로 둬야 라벨이 한 줄이든 두 줄이든 칸 높이가 같다 (flex+wrap 은 제각각이 된다) */
+.tm-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:16px 20px}
+.tm-metric{border:1px solid var(--line);border-radius:11px;background:var(--field);padding:12px 14px;min-width:0}
+.tm-metric .v{font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.tm-metric .l{font-size:11.5px;color:var(--muted);margin-top:3px;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tm-metric .s{font-size:10.5px;color:var(--muted);opacity:.8;margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* 상태는 lv- 접두사 — 전역 .warn(박스: 패딩·테두리·margin-bottom)과 이름이 겹치면
+   그 칸에만 아래 여백이 붙어 그리드 행 전체가 커지고 나머지 칸만 늘어난다. */
+.tm-metric.lv-bad{border-color:var(--fail-line);background:var(--fail-bg)} .tm-metric.lv-bad .v{color:var(--fail)}
+.tm-metric.lv-warn{border-color:var(--amber-line);background:var(--amber-bg)} .tm-metric.lv-warn .v{color:var(--amber)}
+.tm-warn{margin:0 20px 16px;padding:10px 13px;border-radius:9px;font-size:12px;
+  background:var(--fail-bg);border:1px solid var(--fail-line);color:var(--fail)}
+tr.nonstd td{background:color-mix(in srgb,var(--fail-bg) 55%,transparent)}
+.tst{font-size:11px;font-weight:800;padding:2px 8px;border-radius:6px;border:1px solid;margin-right:4px}
+.tst.ok{color:var(--pass);background:var(--pass-bg);border-color:var(--pass-line)}
+.tst.bad{color:var(--fail);background:var(--fail-bg);border-color:var(--fail-line)}
+.tst.new{color:var(--law);background:var(--law-bg);border-color:var(--law-line)}
+.tst.off{color:var(--muted);background:var(--field);border-color:var(--line-2)}
+/* 의미/행위 사전 전환 탭 (카드 헤더) */
+.dict-tabs{display:flex;gap:6px}
+.dict-tabs button{font-family:inherit;font-size:14px;font-weight:800;letter-spacing:-.01em;color:var(--muted);
+  background:transparent;border:0;border-bottom:2px solid transparent;padding:2px 4px 8px;display:inline-flex;align-items:center;gap:7px}
+.dict-tabs button.on{color:var(--ink);border-bottom-color:var(--brand)}
+.dict-tabs .cnt{font-size:11px;font-weight:800;color:var(--muted);background:var(--field);
+  border:1px solid var(--line);border-radius:9px;padding:1px 7px;line-height:1.5}
+.dict-tabs button.on .cnt{color:var(--brand);background:var(--brand-bg);border-color:var(--brand-line)}
+
+/* 사전 표가 길어지면 페이지 대신 표 내부에서 스크롤 (헤더 고정) */
+.tbl-scroll{max-height:460px;overflow:auto}
+.tbl-scroll thead th{position:sticky;top:0;z-index:2;background:var(--card);box-shadow:inset 0 -1px 0 var(--line)}
+
+/* 필터 + 검색 툴바 — 사전과 룰 목록이 같은 모양을 쓴다 */
+.tg-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 20px;
+  border-bottom:1px solid var(--line);background:var(--field)}
+.tg-legend{font-size:11px;color:var(--muted)}
+.tg-hint{font-size:12px;color:var(--muted);margin-bottom:12px}
+.tg-hint b{color:var(--ink)}
+.tg-none{padding:26px 20px;text-align:center;font-size:12.5px;color:var(--muted)}
+
+/* 사전 표 — 열 폭을 고정해 코드·수치가 행마다 흔들리지 않게 한다 */
+table.tg-tbl{table-layout:fixed}
+.tg-tbl .c-code{width:230px;white-space:nowrap}
+.tg-tbl .c-num{width:62px;text-align:center}
+.tg-tbl .c-out{width:58px;text-align:center}
+.tg-tbl .c-st{width:104px}
+.tg-tbl .c-act{width:186px}
+.tg-tbl td.c-code .chip{max-width:180px;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.tg-exp{width:18px;height:18px;border:0;background:transparent;color:var(--muted);vertical-align:middle;
+  margin-right:5px;font-size:10px;line-height:1;padding:0;border-radius:5px;transition:transform .12s,color .12s}
+.tg-exp:hover:not(:disabled){background:var(--line);color:var(--ink)}
+.tg-exp.on{transform:rotate(90deg);color:var(--brand)}
+.tg-exp:disabled{opacity:.25;cursor:default}
+/* 사전은 한 화면에 최대한 많이 보여야 한다 — 셀 여백을 줄여 행을 낮춘다.
+   table.tbl.rows td 를 이기려면 선택자 특이도를 맞춰야 한다. */
+table.tbl.rows.tg-tbl td{padding:8px 14px}
+table.tbl.rows.tg-tbl th{padding-top:9px;padding-bottom:9px}
+.tg-namewrap{display:flex;align-items:center;gap:7px;min-width:0}
+/* 명칭은 평소 텍스트 — 94행이 전부 입력창이면 표가 온통 상자로 보인다 */
+.tg-name{flex:0 1 auto;min-width:0;border:1px solid transparent;background:transparent;
+  border-radius:7px;padding:3px 7px;margin-left:-7px;font:inherit;font-size:13px;color:var(--ink);
+  text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tg-name:hover{border-color:var(--line-2);background:var(--card)}
+.tg-name.empty{color:#9aa6bb;font-size:12px}
+.tg-grp{flex:none;font-size:10.5px;color:var(--muted)}
+.dot-btn{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--line-2);background:var(--card);padding:0}
+.dot-btn.on{background:var(--pass);border-color:var(--pass)}
+.rowacts{display:inline-flex;gap:3px}
+.muted-row td{opacity:.55}
+.addtag{display:inline-flex;align-items:center;gap:5px}
+.sa-chip.off{opacity:.5}
+.sa-chip .x{margin-left:2px;width:15px;height:15px;border:0;border-radius:50%;background:var(--line-2);color:#fff;
+  font-size:9px;line-height:1;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.sa-chip .x:hover{background:var(--fail)}
+/* 코드 교정 — 표 아래 줄 전체를 쓴다 */
+.retagbox{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:11px 16px;background:var(--brand-bg)}
+.retagbox .lb{font-size:11.5px;font-weight:800;color:var(--brand);flex:none}
+.retagbox .arw{color:var(--muted);font-weight:800;flex:none}
+.retagbox input{width:170px;flex:none;background:var(--card)}
+.retagbox .hint{font-size:11.5px;color:var(--muted);min-width:0}
+.retagbox .hint b{color:var(--ink)}
+.rowacts .btn.on{color:var(--brand);border-color:var(--brand-line);background:var(--brand-bg)}
+.fld.sm{height:28px;padding:0 8px;font-size:11.5px;width:110px}
+.btn.xs{font-size:11px;padding:4px 8px;border-radius:7px}
+.tm-rules{display:flex;flex-direction:column;gap:6px;padding:10px 14px;background:var(--field)}
+.tm-rule{display:flex;align-items:center;gap:8px;font-size:12px}
+.tm-rule b{font-weight:700}
+.subrow td{padding:0!important}
+
+.sa-usage{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.sa-chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:5px 10px;border-radius:9px;
+  border:1px solid var(--line);background:var(--field);color:var(--muted)}
+.sa-chip.on{border-color:var(--law-line);background:var(--law-bg);color:var(--law)}
+.sa-chip .mono{font-weight:800;color:var(--ink)}
+.sa-chip.on .mono{color:var(--law)}
+.sa-chip .cnt{font-variant-numeric:tabular-nums;font-weight:800;min-width:16px;text-align:center}
+.tm-toggle{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--muted)}
+/* 페이징으로 넘겼으므로 내부 스크롤을 두지 않는다 — 스크롤 두 겹은 조작이 어렵다 */
+.sa-list{display:flex;flex-direction:column;gap:6px;padding:14px 20px}
+.sa-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 11px;border:1px solid var(--line);
+  border-radius:9px;background:var(--card);transition:border-color .12s,background .12s}
+.sa-row:hover{border-color:var(--line-2)}
+.sa-row.dirty{border-color:var(--brand-line);background:var(--brand-bg)}
+.sa-rt{display:flex;align-items:center;gap:8px;min-width:0;flex:1}
+.sa-rt b{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sa-toggles{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.atoggle{font-family:inherit;font-size:10.5px;font-weight:700;color:var(--muted);background:var(--field);
+  border:1px solid var(--line);border-radius:6px;padding:3px 7px;transition:color .1s,background .1s,border-color .1s}
+.atoggle:hover{border-color:var(--law-line);color:var(--law)}
+.atoggle.on{color:#fff;background:var(--law);border-color:var(--law)}
+/* 저장 버튼은 자리를 미리 잡아둔다 — 나타날 때 토글 줄이 밀리면 잘못 누르게 된다 */
+.sa-save{margin-left:6px;min-width:44px}
+.sa-save.hid{visibility:hidden}
+.rowacts .btn.danger{color:var(--fail)}
+.rowacts .btn.danger:hover:not(:disabled){background:var(--fail-bg);border-color:var(--fail-line)}
+
+/* ── 근거 추적 화면 ───────────────────────────────────────────
+   노드-링크 SVG는 라벨이 전부 잘려 읽을 수 없었다. 룰 한 건 = 한 행으로 편다. */
+.kgv{display:flex;flex-direction:column;gap:16px}
+/* 헤더 — 제목·룰셋명·사슬 통계·바로가기를 한 줄에. 큰 통계 상자 5개는 자리만 먹었다. */
+.kgv-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:15px 20px 13px}
+.kgv-head .t{display:flex;align-items:baseline;gap:10px;min-width:0}
+.kgv-head h2{font-size:15px;margin:0;font-weight:800;letter-spacing:-.01em;flex:none}
+.kgv-head .rs{font-size:12px;color:var(--muted);font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 문서 › 조항 › 룰 › 개념 › 법령 — 화살표로 이 화면이 다루는 사슬임을 드러낸다 */
+.kgv-chain{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:5px 12px;
+  background:var(--field);border:1px solid var(--line);border-radius:10px}
+.kgv-chain .s{display:inline-flex;align-items:baseline;gap:4px;font-size:11.5px;color:var(--muted);font-weight:600}
+.kgv-chain .s b{font-size:13px;font-weight:800;color:var(--ink);letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums}
+.kgv-chain .arw{font-style:normal;color:var(--line-2);margin-right:4px;font-weight:800}
+.kgv-tabs{padding:0 20px;border-bottom:1px solid var(--line)}
+
+table.kgv-tbl{table-layout:fixed}
+.kgv-tbl .c-chunk{width:240px}
+.kgv-tbl .c-cpt{width:190px}
+.kgv-tbl .c-law{width:200px}
+.kgv-tbl .c-ev{width:96px}
+.kgv-tbl td{vertical-align:top}
+.kgv-tbl td.c-rule{padding-right:18px}
+.kgv-rule{display:flex;align-items:flex-start;gap:7px;min-width:0}
+.kgv-rule .tg-exp{margin:1px 0 0;flex:none;font-size:11px;color:var(--muted)}
+.sevdot{width:7px;height:7px;border-radius:50%;margin-top:7px;flex:none}
+.kgv-title{font-size:13px;font-weight:600;line-height:1.45;cursor:pointer;min-width:0}
+.kgv-title:hover{color:var(--brand)}
+/* 셀은 두 줄까지만 — 길이가 제각각이면 행 높이가 널뛴다 */
+.kgv-cell{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  font-size:12px;color:var(--muted);line-height:1.5}
+.kgv-cpt{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:top}
+.kgv-law{font-size:11.5px;line-height:1.5;color:var(--law)}
+.kgv-law b{font-weight:700}
+.kgv-law span{color:var(--muted)}
+.miss-cell{font-size:11.5px;color:#9aa6bb}
+/* 근거 3단계(내규·개념·법령) 충족도 */
+.evdots{display:inline-flex;gap:3px;vertical-align:middle;margin-right:6px}
+.evdots i{width:7px;height:7px;border-radius:50%;background:var(--line-2)}
+.evdots i.on{background:var(--pass)}
+.evn{font-size:11px;font-weight:800;color:var(--muted);font-variant-numeric:tabular-nums}
+.evn.full{color:var(--pass)} .evn.low{color:var(--fail)}
+
+.kgv-path{padding:14px 18px;background:var(--field);display:flex;flex-direction:column;gap:2px}
+.kgv-step{display:grid;grid-template-columns:20px 78px 1fr;gap:9px;align-items:start;
+  padding:7px 0;font-size:12.5px;position:relative}
+.kgv-step::before{content:'';position:absolute;left:9px;top:24px;bottom:-4px;width:2px;background:var(--line-2)}
+.kgv-step:last-of-type::before{display:none}
+.kgv-step .ic{font-size:11px;line-height:1.5;text-align:center;z-index:1;background:var(--field)}
+.kgv-step .lb{font-size:11px;font-weight:800;color:var(--muted);line-height:1.6}
+.kgv-step .bd{color:var(--ink);line-height:1.6;word-break:break-word;min-width:0}
+.kgv-step.off .bd{color:#9aa6bb}
+
+/* ── 온톨로지 캔버스 (클래스–관계 그래프) ──────────────────────
+   노드는 클래스, 엣지는 관계. 줌/팬은 SVG 전체에 transform 을 걸어 처리한다. */
+.kgv-types{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+.kgv-types .mini{margin-right:2px}
+.ont{display:flex;flex-direction:column}
+.ont-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 20px;
+  border-bottom:1px solid var(--line)}
+.ont-hint{font-size:11px;color:var(--muted)}
+.ont-canvas{position:relative;height:600px;background:var(--card);overflow:hidden;
+  cursor:grab;touch-action:none;
+  /* 캔버스임을 알리는 옅은 격자 — 드래그로 움직이는 면이라는 신호 */
+  background-image:radial-gradient(circle,var(--line) 1px,transparent 1px);background-size:22px 22px}
+.ont-canvas:active{cursor:grabbing}
+.ont-canvas svg{display:block;user-select:none}
+.ont-canvas .onode:hover rect{filter:brightness(.97)}
+.ont-legend{position:absolute;left:14px;bottom:12px;display:flex;gap:12px;flex-wrap:wrap;
+  background:color-mix(in srgb,var(--card) 90%,transparent);backdrop-filter:blur(6px);
+  border:1px solid var(--line);border-radius:9px;padding:6px 11px}
+.ont-legend .lg{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;color:var(--muted)}
+.ont-legend .lg i{width:14px;height:2px;border-radius:2px}
+.ont-zoom{position:absolute;right:14px;bottom:12px;display:flex;align-items:center;gap:2px;
+  background:var(--card);border:1px solid var(--line);border-radius:9px;padding:3px;box-shadow:var(--shadow-sm)}
+.ont-zoom button{width:26px;height:26px;border:0;background:transparent;border-radius:6px;
+  color:var(--muted);font-size:13px;line-height:1;padding:0}
+.ont-zoom button:hover{background:var(--field);color:var(--ink)}
+.ont-zoom span{min-width:42px;text-align:center;font-size:11px;font-weight:800;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+.ont-panel{border-top:1px solid var(--line);background:var(--field)}
+.ont-panel .h{display:flex;align-items:center;gap:8px;padding:11px 20px;border-bottom:1px solid var(--line)}
+.ont-panel .h .dot{width:9px;height:9px;border-radius:50%;flex:none}
+.ont-panel .h b{font-size:13px}
+.ont-panel .h .n{margin-left:auto;font-size:11px;font-weight:700;color:var(--muted)}
+.ont-panel .b{padding:12px 20px 16px}
+.ont-panel .rels{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.ont-panel .rels .r{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;
+  background:var(--card);border:1px solid var(--line);border-radius:8px;padding:4px 9px}
+.ont-panel .rels .rel{font-weight:800;color:#c2456a}
+.ont-panel .rels .cnt{font-weight:800;color:var(--muted)}
+.ont-panel .mem{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:5px;margin-top:6px}
+.ont-panel .mem div{font-size:11.5px;color:var(--muted);background:var(--card);border:1px solid var(--line);
+  border-radius:7px;padding:4px 9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── 행위태그 칩 + 내규↔법령 대조 노트 (생성 산출물) ────────────── */
+.atags{display:inline-flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.atag{font-size:10.5px;font-weight:700;color:var(--law);background:var(--law-bg);
+  border:1px solid var(--law-line);border-radius:5px;padding:1px 6px;line-height:1.5}
+.atrow{display:flex;align-items:center;min-height:24px}
+.cmpbox{font-size:11.5px;line-height:1.6;white-space:pre-wrap;padding:9px 11px;border-radius:9px;
+  border:1px solid var(--line);background:var(--field);color:var(--ink)}
+.cmpbox.ok{border-color:var(--pass-line);background:var(--pass-bg);color:#0a6e4e}
+.cmpbox.cmp-warn{border-color:var(--amber-line);background:var(--amber-bg);color:var(--amber)}
+
+/* ── 근거 신뢰도 · 근거 경로 (TrustGraph 개념) ─────────────────────
+   룰셋별 커버리지 요약(내규/법령/승인/게시 %)과 근거가 빈 룰의 경로 추적. */
+.trustbox{border-bottom:1px solid var(--line);background:var(--card)}
+.trusthead{display:flex;align-items:center;gap:12px;padding:11px 16px 9px;cursor:pointer}
+.trusthead .ttitle{font-weight:800;font-size:13.5px;color:var(--ink);flex:none}
+/* 등급 요약 — 강·보통·약 세 칸이 붙은 한 덩어리. 합이 전체 룰 수와 같아야 한다. */
+.tgrade{flex:none;display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.tgrade em{font-style:normal;font-size:11px;font-weight:800;padding:2px 9px;line-height:1.7}
+.tgrade em + em{border-left:1px solid var(--line)}
+.tgrade .g-strong{color:var(--pass);background:var(--pass-bg)}
+.tgrade .g-medium{color:var(--amber);background:var(--amber-bg)}
+.tgrade .g-weak{color:var(--fail);background:var(--fail-bg)}
+.tsum{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tsum b{color:var(--ink)}
+/* 지표는 제목 줄에서 분리해 자동 배치한다 — 좁아지면 칸 수만 줄고 접히지 않는다. */
+.tbars{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));
+  gap:9px 14px;padding:0 16px 12px}
+.metric{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:11px}
+.metric .mtop{display:flex;align-items:baseline;gap:8px}
+.metric .mlabel{color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.metric .mval{margin-left:auto;flex:none;font-variant-numeric:tabular-nums;
+  font-weight:800;font-size:12.5px;color:var(--ink)}
+.metric .mbar{width:100%;height:6px;border-radius:4px;background:var(--line-2);overflow:hidden}
+.metric .mbar i{display:block;height:100%;border-radius:4px;transition:width .25s}
+.metric .mbar i.g-strong{background:var(--pass)}
+.metric .mbar i.g-medium{background:var(--amber)}
+.metric .mbar i.g-weak{background:var(--fail)}
+.metric .msub{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trusthead .pcar{flex:none;color:var(--muted);font-size:12px}
+.tlist{display:flex;flex-direction:column;gap:7px;padding:0 16px 13px;max-height:440px;overflow-y:auto}
+.tnote{font-size:11.5px;color:var(--muted)}
+.tnote.ok{color:var(--pass)}
+.trow{border:1px solid var(--line);border-radius:10px;background:var(--card);overflow:hidden}
+.tmain{display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;flex-wrap:wrap}
+.tmain:hover{background:var(--field)}
+.tmain b{font-size:13px}
+.tdot{flex:none;width:9px;height:9px;border-radius:50%}
+.tdot.g-strong{background:var(--pass)} .tdot.g-medium{background:var(--amber)} .tdot.g-weak{background:var(--fail)}
+.tflags{display:flex;gap:5px;flex-wrap:wrap}
+.tflags .miss,.tflags .caution{font-style:normal;font-size:10.5px;font-weight:700;
+  border-radius:5px;padding:1px 6px;white-space:nowrap}
+.tflags .miss{color:var(--fail);background:var(--fail-bg);border:1px solid var(--fail-line)}
+/* 근거가 아예 없는 것(miss)과 약한 것(caution)은 색으로 구분한다 */
+.tflags .caution{color:var(--amber);background:var(--amber-bg);border:1px solid var(--amber-line)}
+.tlink{flex:none;font-size:11.5px;font-weight:700;color:var(--brand)}
+.tpath{padding:4px 12px 12px;border-top:1px dashed var(--line-2);background:var(--field)}
+.tsteps{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:0}
+.tsteps li{display:grid;grid-template-columns:18px 74px 1fr;align-items:start;gap:8px;
+  padding:6px 0 6px 4px;position:relative;font-size:12px}
+.tsteps li::before{content:'';position:absolute;left:12px;top:18px;bottom:-6px;width:2px;background:var(--line-2)}
+.tsteps li:last-child::before{display:none}
+.tsteps .sicon{font-size:12px;line-height:1.3;z-index:1;text-align:center}
+/* 상태는 s- 접두사 — 전역 .warn(박스 스타일)과 이름이 겹치면 행이 박스로 부풀어 연결선이 끊긴다 */
+.tsteps li.s-ok .sicon{color:var(--pass)} .tsteps li.s-warn .sicon{color:var(--amber)} .tsteps li.s-bad .sicon{color:var(--fail)}
+.tsteps .slabel{color:var(--muted);font-weight:700;font-size:11px}
+.tsteps .sdetail{color:var(--ink);word-break:break-word}
+.tsteps li.s-warn .sdetail{color:var(--amber)} .tsteps li.s-bad .sdetail{color:var(--fail)}
+
+/* ── 룰 검색창 — 옆 필터 탭(.seg)과 높이·라운드·배경을 맞춘다 ── */
+.srchbox{display:flex;align-items:center;gap:8px;height:39px;min-width:280px;max-width:380px;
+  padding:0 12px;background:var(--field);border:1px solid var(--line);border-radius:11px;
+  transition:background .12s,border-color .12s,box-shadow .12s}
+.srchbox:focus-within{background:var(--card);border-color:var(--brand);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 12%,transparent)}
+.srchbox .ic{font-size:12px;color:var(--muted);flex:none;line-height:1}
+.srchbox input{flex:1;min-width:0;border:0;background:transparent;padding:0;
+  font-family:inherit;font-size:12.5px;color:var(--ink)}
+.srchbox input:focus{outline:none}
+.srchbox input::placeholder{color:#9aa6bb}
+.srchbox .x{flex:none;width:17px;height:17px;border:0;border-radius:50%;background:var(--line-2);
+  color:#fff;font-size:11px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0}
+.srchbox .x:hover{background:var(--muted)}
+/* 검색 중일 때 결과 수를 강조 — 몇 건이 걸렸는지 바로 보이게 */
+.rl-tools .hit{font-size:11.5px;color:var(--muted)}
+.rl-tools .hit b{color:var(--brand);font-weight:800}
+
+/* ── 법령 관리 ─────────────────────────────────────────────── */
+.schedbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 16px;
+  background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+.schedbar .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.schedbar .dot.on{background:var(--pass)} .schedbar .dot.off{background:var(--line-2)}
+.schedbar .k{font-size:11px;letter-spacing:.05em;text-transform:uppercase;font-weight:800;color:var(--muted)}
+.schedbar .v{font-size:12.5px;font-weight:700}
+.schedbar .sep{width:1px;height:22px;background:var(--line)}
+
+/* 조문 패널 */
+.artpanel{background:var(--field);border-top:1px solid var(--line)}
+.artbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:11px 16px;border-bottom:1px solid var(--line)}
+.artlist{max-height:460px;overflow-y:auto}
+.artrow{border-bottom:1px solid var(--line)}
+.artrow>.h{display:flex;align-items:center;gap:10px;padding:9px 16px;cursor:pointer}
+.artrow>.h:hover{background:var(--card)}
+.artrow.on>.h{background:var(--card)}
+.artrow .no{font-size:11px;font-weight:800;color:var(--brand);background:var(--brand-bg);
+  border:1px solid var(--brand-line);border-radius:6px;padding:2px 8px;min-width:74px;text-align:center;flex:none}
+.artrow .ti{font-size:12.5px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.artrow .body{padding:0 16px 14px 106px;font-size:12px;line-height:1.75;color:var(--ink);
+  white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto;background:var(--card)}
+.artempty{padding:18px 16px;font-size:12.5px;color:var(--muted)}
+
+/* 탭 안 대기 건수 배지 */
+.seg button .segbadge{margin-left:6px;min-width:17px;height:17px;padding:0 5px;border-radius:9px;
+  background:var(--fail);color:#fff;font-size:10px;font-weight:800;
+  display:inline-flex;align-items:center;justify-content:center;vertical-align:1px}
+
+
+/* ── 법령 변경 이력 — 날짜 그룹 + 배치 묶기 (많이 쌓여도 읽히게) ── */
+.hday{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--field);
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2}
+.hday b{font-size:12.5px;font-weight:800}
+.hday .n{font-size:11px;color:var(--muted)}
+
+.hitem{border-bottom:1px solid var(--line)}
+.hitem>.h{display:flex;align-items:baseline;gap:10px;padding:11px 16px}
+.hitem.clickable>.h{cursor:pointer}
+.hitem.clickable>.h:hover{background:var(--field)}
+.hitem .tm{font-size:11.5px;color:var(--muted);min-width:42px;flex:none;
+  font-family:"SF Mono","Consolas",ui-monospace,monospace}
+.hitem .kind{font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:6px;border:1px solid;flex:none}
+.hitem.collected .kind{color:var(--brand);background:var(--brand-bg);border-color:var(--brand-line)}
+.hitem.updated   .kind{color:var(--pass);background:var(--pass-bg);border-color:var(--pass-line)}
+.hitem.detected  .kind{color:var(--amber);background:var(--amber-bg);border-color:var(--amber-line)}
+.hitem.rejected  .kind{color:var(--fail);background:var(--fail-bg);border-color:var(--fail-line)}
+.hitem .txt{flex:1;min-width:0;font-size:12.5px;line-height:1.5}
+.hitem .txt b{font-weight:700}
+.hitem .txt .sub{color:var(--muted);font-size:11.5px;margin-top:2px}
+.hitem .car{flex:none;color:var(--muted);font-size:11px}
+
+/* 배치 펼침 — 같은 시각·같은 법령의 조문들 */
+.hsub{background:var(--field);padding:4px 16px 10px 68px;max-height:260px;overflow:auto}
+.hsub .r{display:flex;align-items:baseline;gap:9px;padding:5px 0;font-size:12px;border-bottom:1px solid var(--line)}
+.hsub .r:last-child{border-bottom:0}
+.hsub .r .no{font-size:10.5px;font-weight:800;color:var(--brand);background:var(--card);
+  border:1px solid var(--brand-line);border-radius:5px;padding:1px 7px;min-width:66px;text-align:center;flex:none}
+.hsub .r .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* touch 1784687216 */

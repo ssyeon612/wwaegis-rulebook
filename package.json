@@ -1,0 +1,14 @@
+{
+  "name": "rulebook-admin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "회사 내규를 업로드하면 도메인을 자동 감지하고 관련 법령을 붙여 룰셋을 자동 추출하는 온프레미스 규정관리 콘솔",
+  "scripts": {
+    "dev": "concurrently -n server,web -c blue,green \"npm --prefix server run dev\" \"npm --prefix web run dev\"",
+    "install:all": "npm --prefix server install && npm --prefix web install",
+    "start": "npm --prefix server start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}
