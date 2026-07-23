@@ -5,6 +5,20 @@ import { useWs } from '../lib/ws.js';
 
 const ICON = { finance: '🏦', securities: '📈', auto: '🚗', insurance: '🛡' };
 
+// knowledge 본문 끝의 [추가 의미태그] 라인을 분리한다 (서버 splitMeaningTags 와 동일 규칙).
+// 판단근거 칸에는 본문(body)만 보이고, 추가 의미태그는 의미태그 칩으로 옮겨 보여준다.
+const EXTRA_MEANING_RE = /^\s*\[추가\s*의미\s*태그\]\s*(.+)$/;
+function splitMeaning(knowledge) {
+  if (!knowledge || typeof knowledge !== 'string') return { body: knowledge || '', tags: [] };
+  const tags = [], kept = [];
+  for (const line of knowledge.split('\n')) {
+    const m = line.match(EXTRA_MEANING_RE);
+    if (m) { m[1].split(/[,\s]+/).map((s) => s.trim()).filter(Boolean).forEach((t) => tags.push(t)); continue; }
+    kept.push(line);
+  }
+  return { body: kept.join('\n').replace(/\n+$/, ''), tags: [...new Set(tags)] };
+}
+
 // 룰 편집 — 하는 일이 둘로 갈린다.
 //  · 선택 모드: 기존 룰셋을 골라 룰을 검토·편집·게시  (상시)
 //  · 생성 모드: 내규를 올려 새 룰셋을 만들거나 기존에 추가 (가끔)
@@ -62,12 +76,19 @@ function CreatePanel({ target, targetName, onDone }) {
   const [fname, setFname] = useState('');
   const [text, setText] = useState('');
   const [docName, setDocName] = useState('');
-  const [prodName, setProdName] = useState('');   // STT 목록 표시 상품명
+  const [prodName, setProdName] = useState('');   // STT 목록 표시 상품명 = 문서명
+  const [prodTouched, setProdTouched] = useState(false);   // 문서명을 사용자가 직접 고쳤는지
   const [hint, setHint] = useState('');
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const pick = (f) => { if (f) { setFile(f); setFname(f.name); setErr(''); } };
+  const [note, setNote] = useState('');   // 법령 자동 수집 결과 안내
+  const pick = (f) => {
+    if (!f) return;
+    setFile(f); setFname(f.name); setErr('');
+    // 문서명을 아직 직접 수정하지 않았으면 파일명(확장자 제외)으로 기본 바인딩
+    if (!prodTouched) setProdName(f.name.replace(/\.[^.]+$/, ''));
+  };
 
   const ready = src === 'file' ? !!file : !!text.trim();
 
@@ -86,6 +107,14 @@ function CreatePanel({ target, targetName, onDone }) {
       if (target) form.append('target_ruleset_id', String(target));
       const res = await api.extract(form);
       if (res.error) { setErr(res.message || res.error); setBusy(false); return; }
+      // 법령 자동 수집 결과가 있으면 잠깐 안내 후 이동 (없으면 즉시 이동)
+      const lc = res.law_collect;
+      if (lc?.collected?.length) {
+        const arts = lc.collected.reduce((s, c) => s + (c.added || 0), 0);
+        setNote(`국가법령정보센터에서 법령 ${lc.collected.length}건(조문 ${arts}개)을 자동 수집·연결했습니다.`);
+        setTimeout(() => onDone(res.ruleset_id), 1300);
+        return;
+      }
       onDone(res.ruleset_id);
     } catch (e) { setErr(String(e)); }
     setBusy(false);
@@ -99,7 +128,7 @@ function CreatePanel({ target, targetName, onDone }) {
           <h2>{target ? `📎 내규 업로드 → ${targetName}` : '새 룰셋 생성'}</h2>
           <div className="sub">{target
             ? '아래에서 내규를 올리면 룰을 뽑아 이 룰셋에 더합니다.'
-            : '내규를 올리면 도메인을 자동 판별하고 관련 법령을 붙여 룰셋을 만듭니다.'}</div>
+            : '내규를 올리면 도메인을 자동 판별하고, 인용한 법령을 국가법령정보센터에서 검색·수집해 붙여 룰셋을 만듭니다.'}</div>
         </div>
       </div>
       <div className="card-b">
@@ -117,7 +146,7 @@ function CreatePanel({ target, targetName, onDone }) {
             {!target && src === 'file' && (
               <>
                 <label className="flabel">문서명 (선택)</label>
-                <input className="fld" value={prodName} onChange={(e) => setProdName(e.target.value)}
+                <input className="fld" value={prodName} onChange={(e) => { setProdName(e.target.value); setProdTouched(true); }}
                   placeholder="예: 완전판매 체크리스트" style={{ marginBottom: 14 }} />
               </>
             )}
@@ -160,6 +189,7 @@ function CreatePanel({ target, targetName, onDone }) {
             </div>
 
             {err && <div className="warn" style={{ background: 'var(--fail-bg)', borderColor: 'var(--fail-line)', color: 'var(--fail)', marginBottom: 14 }}>⚠ {err}</div>}
+            {note && <div className="warn" style={{ background: 'var(--pass-bg)', borderColor: 'var(--pass-line)', color: 'var(--pass)', marginBottom: 14 }}>⚖ {note}</div>}
 
             <button className="btn primary" disabled={busy || !ready} onClick={run}
               style={{ width: '100%', justifyContent: 'center' }}>
@@ -284,7 +314,6 @@ function RuleWorkbench({ rs, onChange, onAdd }) {
               <thead><tr>
                 <th className="ck"><input type="checkbox" checked={allChecked} onChange={toggleAll} /></th>
                 <th style={{ width: 40 }}>#</th>
-                <th style={{ width: 150 }}>태그</th>
                 <th>제목 · 내규 출처</th>
                 <th style={{ width: 84 }}>심각도</th>
                 <th style={{ width: 88 }}>상태</th>
@@ -400,7 +429,10 @@ function TrustPanel({ rs }) {
   const [path, setPath] = useState(null);   // { ruleId, loading, data }
 
   const load = () => api.trust(rs.id).then(setData).catch(() => setData(null));
-  useEffect(() => { load(); setPath(null); }, [rs.id, rs.rules.length, rs.version]);
+  // 승인·법령편집은 룰 개수·버전을 바꾸지 않는다 — 부모가 rs를 재조회할 때마다(=새 객체)
+  // 신뢰도를 다시 계산해야 '사람 승인' 등이 실시간 반영된다. 근거 경로는 룰셋이 바뀔 때만 닫는다.
+  useEffect(() => { load(); }, [rs]);
+  useEffect(() => { setPath(null); }, [rs.id]);
 
   if (!data || !data.coverage.total) return null;
   const c = data.coverage;
@@ -523,78 +555,98 @@ function ActionTags({ v, empty }) {
 
 function RuleRow({ r, i, open, checked, onCheck, onToggle, onPatch, onDel }) {
   const [title, setTitle] = useState(r.title);
-  const [know, setKnow] = useState(r.knowledge);
-  useEffect(() => { setTitle(r.title); setKnow(r.knowledge); }, [r.id, r.title, r.knowledge]);
+  // 판단근거 본문과 추가 의미태그를 분리 — textarea 에는 본문만, 태그는 칩으로.
+  // 서버가 meaning_extra 로 태그를 내려주고, 저장 시 운반 라인도 서버가 보존한다.
+  const { body, tags: parsed } = useMemo(() => splitMeaning(r.knowledge), [r.knowledge]);
+  const extraTags = r.meaning_extra ?? parsed;
+  const [know, setKnow] = useState(body);
+  useEffect(() => { setTitle(r.title); setKnow(body); }, [r.id, r.title, body]);
 
+  // 본문만 저장한다 — 추가 의미태그 운반 라인은 서버(PATCH)가 다시 붙인다.
+  const saveKnow = () => { if (know !== body) onPatch({ knowledge: know }); };
+
+  const stop = (e) => e.stopPropagation();
   return (
     <>
-      <tr className={(open ? 'openrow ' : '') + (checked ? 'on' : '')}>
-        <td className="ck"><input type="checkbox" checked={checked} onChange={onCheck} /></td>
+      {/* 행 전체를 클릭하면 상세가 열린다 — 편집 버튼은 없앴다. 체크박스·승인은 전파를 막는다. */}
+      <tr className={'rl-row' + (open ? ' openrow' : '') + (checked ? ' on' : '')} onClick={onToggle}>
+        <td className="ck" onClick={stop}><input type="checkbox" checked={checked} onChange={onCheck} /></td>
         <td className="mono muted">{String(i + 1).padStart(2, '0')}</td>
-        <td>
-          <div className="tagcell">
-            <span className="chip mono">{r.tag}</span>
-            <ActionTags v={r.action_tags} />
-          </div>
-        </td>
         <td className="ttl">
           {r.title}
           {r.internal_source && <div className="src">📄 {r.internal_source}</div>}
         </td>
         <td><span className={'sev ' + r.severity}>{r.severity}</span></td>
         <td><span className={'badge ' + (r.status === 'approved' ? 'published' : 'draft')}><i />{r.status === 'approved' ? '승인' : '검토중'}</span></td>
-        {/* 아이콘만 있는 ↩ / ✓ 는 무엇을 하는지 알 수 없었다 — 동사를 쓴다.
-            칸이 좁아 두 버튼이 세로로 접히던 것도 폭을 잡아 한 줄로 편다. */}
         <td className="acts">
           <div className="rl-acts">
-            <button className="btn sm ghost" onClick={onToggle}>{open ? '닫기' : '편집'}</button>
             {r.status === 'approved'
               ? <button className="btn sm ghost undo" title="검토중으로 되돌립니다"
-                  onClick={() => onPatch({ status: 'draft' })}>승인 취소</button>
+                  onClick={(e) => { stop(e); onPatch({ status: 'draft' }); }}>승인 취소</button>
               : <button className="btn sm ok" title="승인하면 게시본에 포함됩니다"
-                  onClick={() => onPatch({ status: 'approved' })}>✓ 승인</button>}
+                  onClick={(e) => { stop(e); onPatch({ status: 'approved' }); }}>✓ 승인</button>}
+            <span className={'rl-caret' + (open ? ' on' : '')} aria-hidden="true">▸</span>
           </div>
         </td>
       </tr>
 
       {open && (
-        <tr className="editrow"><td colSpan="7">
-          <div className="rl-edit">
-            <div>
-              <label className="flabel">제목</label>
-              <input className="fld" value={title} onChange={(e) => setTitle(e.target.value)}
-                onBlur={() => title !== r.title && onPatch({ title })} style={{ marginBottom: 12 }} />
-
-              <label className="flabel">심각도</label>
-              <select className="fld" value={r.severity} onChange={(e) => onPatch({ severity: e.target.value })}
-                style={{ marginBottom: 12 }}>
-                {['HIGH', 'MEDIUM', 'LOW'].map((s) => <option key={s}>{s}</option>)}
-              </select>
-
-              <label className="flabel">🏷 행위태그</label>
-              <div className="atrow" style={{ marginBottom: 12 }}>
-                <ActionTags v={r.action_tags} empty="(없음)" />
+        <tr className="editrow"><td colSpan="6">
+          <div className="rl-edit" onClick={stop}>
+            {/* 상단: 정체성(제목·심각도·상태) + 삭제 */}
+            <div className="rle-head">
+              <div className="rle-f rle-title">
+                <label className="flabel">제목</label>
+                <input className="fld" value={title} onChange={(e) => setTitle(e.target.value)}
+                  onBlur={() => title !== r.title && onPatch({ title })} />
               </div>
-
-              <label className="flabel">⚖ 법령 근거</label>
-              <div className="lawline" style={{ marginBottom: 12 }}>{r.law_basis || '(매핑 없음)'}</div>
-
-              <label className="flabel">🔎 내규↔법령 대조</label>
-              {/* cmp-warn — 전역 .warn 은 박스 스타일이라 여기 쓰면 여백이 어긋난다 */}
-              <div className={'cmpbox' + (String(r.law_compare || '').startsWith('⚠') ? ' cmp-warn' : (r.law_compare ? ' ok' : ''))}
-                style={{ marginBottom: 12 }}>{r.law_compare || '—'}</div>
-
-              <label className="flabel">📄 내규 출처</label>
-              <div className="srcbox">{r.internal_source || '—'}</div>
-
-              <button className="btn sm ghost" onClick={onDel} style={{ marginTop: 12 }}>🗑 이 룰 삭제</button>
+              <div className="rle-f">
+                <label className="flabel">심각도</label>
+                <select className="fld" value={r.severity} onChange={(e) => onPatch({ severity: e.target.value })}>
+                  {['HIGH', 'MEDIUM', 'LOW'].map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="rle-f">
+                <label className="flabel">상태</label>
+                <div className="rle-status"><span className={'badge ' + (r.status === 'approved' ? 'published' : 'draft')}><i />{r.status === 'approved' ? '승인' : '검토중'}</span></div>
+              </div>
+              <button className="rle-del" onClick={onDel} title="이 룰 삭제">🗑 삭제</button>
             </div>
 
-            <div className="kw">
-              <label className="flabel">판단근거 (knowledge) — 정의 · 근거 · 준수 · 위반 · 예시</label>
-              <textarea className="fld mono" style={{ fontSize: 12, lineHeight: 1.65 }}
-                value={know} onChange={(e) => setKnow(e.target.value)}
-                onBlur={() => know !== r.knowledge && onPatch({ knowledge: know })} />
+            {/* 본문: 좌 참조정보 · 우 판단근거(주 편집 대상) */}
+            <div className="rle-body">
+              <div className="rle-side">
+                <div className="rle-f">
+                  <label className="flabel">🏷 의미태그</label>
+                  <div className="atrow">
+                    <span className="chip mono">{r.tag}</span>
+                    {extraTags.map((t) => <span key={t} className="chip mono mtag" title="추가 의미태그 — required_meaning_tags 로 서빙">{t}</span>)}
+                  </div>
+                </div>
+                <div className="rle-f">
+                  <label className="flabel">🏷 행위태그</label>
+                  <div className="atrow"><ActionTags v={r.action_tags} empty="(없음)" /></div>
+                </div>
+                <div className="rle-f">
+                  <label className="flabel">⚖ 법령 근거</label>
+                  <div className="lawline">{r.law_basis || '(매핑 없음)'}</div>
+                </div>
+                <div className="rle-f">
+                  <label className="flabel">🔎 내규↔법령 대조</label>
+                  <div className={'cmpbox' + (String(r.law_compare || '').startsWith('⚠') ? ' cmp-warn' : (r.law_compare ? ' ok' : ''))}>{r.law_compare || '—'}</div>
+                </div>
+                <div className="rle-f">
+                  <label className="flabel">📄 내규 출처</label>
+                  <div className="srcbox">{r.internal_source || '—'}</div>
+                </div>
+              </div>
+
+              <div className="rle-main">
+                <label className="flabel">판단근거 (knowledge) — 정의 · 근거 · 준수 · 위반 · 예시</label>
+                <textarea className="fld mono" style={{ fontSize: 12, lineHeight: 1.65 }}
+                  value={know} onChange={(e) => setKnow(e.target.value)}
+                  onBlur={saveKnow} />
+              </div>
             </div>
           </div>
         </td></tr>

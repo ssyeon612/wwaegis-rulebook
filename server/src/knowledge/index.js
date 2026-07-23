@@ -54,12 +54,31 @@ export function deriveActionTags(text) {
 //  · [부류] TAGGING · [체크리스트 항목] 02-01  → 서빙 메타가 본문에 섞인 줄 (통째로 제거)
 //  · [근거] — 본 매뉴얼 내부 조문 (외부 법령 미연결) → 외부 법령이 없을 때의 placeholder
 //    (실제 법령이 함께 있으면 그 부분은 남기고, 라벨만 남으면 줄 자체를 버린다)
+// [추가 의미태그] 라인 파서 — 라인 정규식 하나로 통일
+const EXTRA_MEANING_RE = /^\s*\[추가\s*의미\s*태그\]\s*(.+)$/;
+
+// knowledge 본문에서 [추가 의미태그] 라인을 분리한다.
+//  · 반환 body : 태그 라인을 뺀 판단근거 본문
+//  · 반환 tags : 추가 의미태그 코드 배열 (공백·쉼표 구분, 중복 제거)
+// 새 컬럼을 만들지 않고, 이 라인을 '의미태그 운반체'로만 쓴다 — 서빙 시 required_meaning_tags 로 옮긴다.
+export function splitMeaningTags(knowledge) {
+  if (!knowledge || typeof knowledge !== 'string') return { body: knowledge || '', tags: [] };
+  const tags = [], kept = [];
+  for (const line of knowledge.split('\n')) {
+    const m = line.match(EXTRA_MEANING_RE);
+    if (m) { m[1].split(/[,\s]+/).map((s) => s.trim()).filter(Boolean).forEach((t) => tags.push(t)); continue; }
+    kept.push(line);
+  }
+  return { body: kept.join('\n').replace(/\n+$/, ''), tags: [...new Set(tags)] };
+}
+
 export function cleanKnowledge(knowledge) {
   if (!knowledge || typeof knowledge !== 'string') return knowledge;
   const out = [];
   for (let line of knowledge.split('\n')) {
-    // 서빙 메타 줄 — [부류]/[체크리스트 항목] 으로 시작하면 통째로 제거
+    // 서빙 메타 줄 — [부류]/[체크리스트 항목]/[추가 의미태그] 로 시작하면 통째로 제거
     if (/^\s*\[(부류|체크리스트\s*항목)\]/.test(line)) continue;
+    if (EXTRA_MEANING_RE.test(line)) continue;   // 의미태그는 required_meaning_tags 로 옮긴다
     if (/본\s*매뉴얼\s*내부\s*조문|외부\s*법령\s*미연결/.test(line)) {
       line = line
         .replace(/\(\s*(외부\s*)?법령\s*미연결\s*\)/g, '')

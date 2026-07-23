@@ -5,8 +5,10 @@ import crypto from 'crypto';
 import db from '../db.js';
 import { parseFile } from '../services/parsers.js';
 import { analyzeDocument, activeProvider } from '../llm/index.js';
-import { PACKS, cleanKnowledge } from '../knowledge/index.js';
-import { linkRuleToLaw, lawsForRule } from '../services/lawLink.js';
+import { PACKS, cleanKnowledge, splitMeaningTags } from '../knowledge/index.js';
+import { linkRuleToLaw, lawsForRule, parseLawBasis, coreToken, findLocalArticle } from '../services/lawLink.js';
+import { searchLaws, fetchLawArticles } from '../services/lawApi.js';
+import { syncLaw } from '../services/lawStore.js';
 import { logChange, logRuleEdit, ruleHistory, rulesetHistory } from '../services/history.js';
 import { buildGraph, provenance, ensureChunks, linkRulesToChunks } from '../services/graph.js';
 import { buildKG, getKG } from '../services/kg/index.js';
@@ -46,6 +48,54 @@ function buildLawCompare(lawBasis, lawId) {
 }
 
 // --- 업로드 → 파싱 → 도메인 감지 → 분석 → 룰셋(초안) 저장 ---
+// (C방식) 생성 시 자동 법령 수집 — 룰이 인용한 법령 중 로컬에 없는 것을 국가법령정보센터에서
+// 검색·수집한다. LAW_API_OC 미설정이나 개별 실패는 무시하고(생성은 계속) 요약만 리턴한다.
+async function pickLaw(name) {
+  const token = coreToken(name);
+  // 약칭(예: 자본시장법)이 안 잡히면 코어토큰으로 한 번 더 검색
+  for (const q of [...new Set([name, token])]) {
+    const list = await searchLaws(q, 10).catch(() => []);
+    const cands = list.filter((l) => l.name);
+    if (!cands.length) continue;
+    // 현행 우선 · 코어토큰 포함명 우선
+    cands.sort((a, b) =>
+      (Number(!!b.current) - Number(!!a.current)) ||
+      (Number(b.name.includes(token)) - Number(a.name.includes(token))));
+    return cands[0];
+  }
+  return null;
+}
+
+async function autoCollectLaws(rules) {
+  const summary = { enabled: !!process.env.LAW_API_OC, collected: [], failed: [], skipped: 0 };
+  if (!summary.enabled) return summary;
+
+  // 인용된 법령을 법령명 기준으로 유니크하게 모으고 필요한 조문번호도 기록
+  const wanted = new Map();
+  for (const r of rules) {
+    const p = parseLawBasis(r.law_basis);
+    if (!p) continue;
+    const g = wanted.get(p.name) || { name: p.name, articles: new Set() };
+    g.articles.add(p.article);
+    wanted.set(p.name, g);
+  }
+
+  for (const { name, articles } of wanted.values()) {
+    // 인용 조문이 모두 이미 로컬에 있으면 외부 호출을 건너뛴다
+    if (![...articles].some((a) => !findLocalArticle(name, a))) { summary.skipped++; continue; }
+    try {
+      const hit = await pickLaw(name);
+      if (!hit) { summary.failed.push({ name, reason: '검색 결과 없음' }); continue; }
+      const { meta, articles: arts } = await fetchLawArticles(hit.law_key);
+      const r = syncLaw(meta, arts);
+      summary.collected.push({ name: meta.law_name, added: r.added, changed: r.changed });
+    } catch (e) {
+      summary.failed.push({ name, reason: e.message });
+    }
+  }
+  return summary;
+}
+
 router.post('/extract', upload.single('file'), async (req, res) => {
   try {
     let content = req.body.text || '';
@@ -91,6 +141,11 @@ router.post('/extract', upload.single('file'), async (req, res) => {
        VALUES (@ruleset_id,@order_idx,@tag,@action_tags,@title,@severity,@speaker,@source_rule_id,@internal_source,@law_basis,@knowledge)`
     );
     const setCompare = db.prepare('UPDATE rules SET law_compare=? WHERE id=?');
+
+    // (C) 링크 전에: 인용 법령을 외부에서 검색·수집한다 (async → 동기 트랜잭션 밖에서 먼저 실행).
+    // 이후 linkRuleToLaw 가 새로 수집된 조문을 찾아 rule_laws 에 붙는다.
+    const law_collect = await autoCollectLaws(analysis.rules);
+
     let inserted = 0, skipped = 0;
     db.transaction((rules) => {
       let idx = startIdx;
@@ -126,6 +181,7 @@ router.post('/extract', upload.single('file'), async (req, res) => {
       skipped,
       unmatched: analysis.unmatched,
       log: analysis.log,
+      law_collect,
     });
   } catch (err) {
     res.status(500).json({ error: 'extract_failed', message: err.message });
@@ -155,8 +211,10 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const rs = db.prepare('SELECT * FROM rulesets WHERE id=?').get(req.params.id);
   if (!rs) return res.status(404).json({ error: 'not_found' });
+  // 판단근거는 정제해 내려주고, 본문에 섞인 [추가 의미태그] 는 meaning_extra 로 분리한다.
+  // (편집 칸엔 본문만, 태그는 별도 칩으로 — 서빙 required_meaning_tags 와 같은 값)
   rs.rules = db.prepare('SELECT * FROM rules WHERE ruleset_id=? ORDER BY order_idx').all(req.params.id)
-    .map((r) => ({ ...r, knowledge: cleanKnowledge(r.knowledge) }));
+    .map((r) => ({ ...r, knowledge: cleanKnowledge(r.knowledge), meaning_extra: splitMeaningTags(r.knowledge).tags }));
   res.json(rs);
 });
 
@@ -168,6 +226,13 @@ router.patch('/rules/:ruleId', (req, res) => {
   // action_tags 는 배열로 오면 JSON 문자열로 저장 (better-sqlite3는 배열 바인딩 불가)
   const val = (f) => (f === 'action_tags' && Array.isArray(req.body[f])) ? JSON.stringify(req.body[f]) : req.body[f];
   const before = db.prepare('SELECT * FROM rules WHERE id=?').get(req.params.ruleId);
+  // knowledge 편집 시: 저장소의 [추가 의미태그] 운반 라인을 보존한다 (편집 칸엔 안 보이므로
+  // 그냥 저장하면 유실됨). required_meaning_tags 가 이 라인에서 나오므로 다시 붙여준다.
+  if ('knowledge' in req.body && before) {
+    const { tags } = splitMeaningTags(before.knowledge);
+    const incomingHasLine = /\[추가\s*의미\s*태그\]/.test(req.body.knowledge || '');
+    if (tags.length && !incomingHasLine) req.body.knowledge = `${req.body.knowledge}\n[추가 의미태그] ${tags.join(' ')}`;
+  }
   db.prepare(`UPDATE rules SET ${set.map((f) => `${f}=?`).join(',')} WHERE id=?`)
     .run(...set.map(val), req.params.ruleId);
   if (before) logRuleEdit(req.params.ruleId, before, { ...before, ...req.body }, req.body.actor || 'admin');

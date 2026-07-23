@@ -250,6 +250,8 @@ textarea.fld{min-height:220px;resize:vertical;line-height:1.65}
 .pill.published,.pill.approved{color:var(--pass);border-color:var(--pass-line);background:var(--pass-bg)}
 .chip{font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px;background:var(--brand-bg);color:var(--brand)}
 .chip.none{background:var(--amber-bg);color:var(--amber)}
+/* 의미태그 뱃지는 대표·추가 구분 없이 배경색을 통일한다 (.chip 과 동일) */
+.chip.mtag{background:var(--brand-bg);color:var(--brand)}
 
 table.tbl{width:100%;border-collapse:collapse;font-size:13px}
 table.tbl th{text-align:left;font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
@@ -501,15 +503,38 @@ table.tbl.rl td.ttl .src{font-size:11px;color:var(--muted);font-weight:400;margi
 
 /* 펼침 편집: 전체폭 2단 (좌 메타 / 우 판단근거) */
 tr.editrow td{padding:0!important;background:var(--field);border-bottom:1px solid var(--line-2)}
-.rl-edit{display:grid;grid-template-columns:minmax(0,320px) minmax(0,1fr);gap:18px;padding:16px 18px}
-@media(max-width:1040px){.rl-edit{grid-template-columns:1fr}}
+/* 행 전체 클릭으로 상세 열기 — 클릭 가능 표시 */
+.rl-row{cursor:pointer}
+.rl-caret{display:inline-flex;align-items:center;justify-content:center;width:18px;color:var(--muted);
+  font-size:11px;transition:transform .16s,color .12s}
+.rl-row:hover .rl-caret{color:var(--brand)}
+.rl-caret.on{transform:rotate(90deg);color:var(--brand)}
+
+/* ── 상세 편집 패널 ── */
+.rl-edit{display:flex;flex-direction:column;gap:16px;padding:16px 18px}
+/* 상단 정체성 스트립 — 제목(넓게) · 심각도 · 상태 · 삭제 */
+.rle-head{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;
+  padding-bottom:14px;border-bottom:1px solid var(--line)}
+.rle-f{display:flex;flex-direction:column;gap:6px;min-width:0}
+.rle-f .flabel{margin:0}
+.rle-title{flex:1;min-width:240px}
+.rle-head .rle-f select{width:auto;min-width:110px}
+/* 상태 뱃지를 입력칸(34px)과 같은 높이 박스에 담아 라벨·필드가 한 줄로 정렬되게 한다 */
+.rle-status{display:flex;align-items:center;height:34px}
+.rle-del{margin-left:auto;align-self:flex-end;height:34px;padding:0 12px;border-radius:9px;
+  border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:12px;font-weight:700;
+  cursor:pointer;transition:border-color .12s,color .12s,background .12s}
+.rle-del:hover{border-color:var(--fail-line);color:var(--fail);background:var(--fail-bg)}
+/* 본문 2열 — 좌 참조정보 / 우 판단근거(주 편집) */
+.rle-body{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:18px;align-items:start}
+@media(max-width:1040px){.rle-body{grid-template-columns:1fr}}
+.rle-side{display:flex;flex-direction:column;gap:13px}
+.rle-main{display:flex;flex-direction:column;gap:6px;min-height:100%}
+.rle-main textarea{flex:1;min-height:280px}
 .rl-edit .lawline{background:var(--law-bg);border:1px solid var(--law-line);color:var(--law);
   border-radius:9px;padding:8px 10px;font-size:12px;line-height:1.5}
 .rl-edit .srcbox{background:var(--card);border:1px solid var(--line);border-radius:9px;
   padding:8px 10px;font-size:12px;line-height:1.5;max-height:120px;overflow:auto}
-.rl-edit textarea{min-height:100%;height:100%}
-.rl-edit .kw{display:flex;flex-direction:column;height:100%}
-.rl-edit .kw textarea{flex:1;min-height:210px}
 
 /* ── 생성 패널: 전체폭 2단 (좌 문서명·AI 보충 설명 / 우 내규 입력·실행) ── */
 .seg.eq{display:flex}
@@ -859,7 +884,9 @@ table.kgv-tbl{table-layout:fixed}
 .atags{display:inline-flex;flex-wrap:wrap;gap:4px;margin-top:5px}
 .atag{font-size:10.5px;font-weight:700;color:var(--law);background:var(--law-bg);
   border:1px solid var(--law-line);border-radius:5px;padding:1px 6px;line-height:1.5}
-.atrow{display:flex;align-items:center;min-height:24px}
+.atrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-height:24px}
+/* 편집 화면 의미태그 뱃지 — 테두리 + 간격 (태그가 많아도 줄바꿈) */
+.rl-edit .atrow .chip{border:1px solid var(--brand-line)}
 .cmpbox{font-size:11.5px;line-height:1.6;white-space:pre-wrap;padding:9px 11px;border-radius:9px;
   border:1px solid var(--line);background:var(--field);color:var(--ink)}
 .cmpbox.ok{border-color:var(--pass-line);background:var(--pass-bg);color:#0a6e4e}

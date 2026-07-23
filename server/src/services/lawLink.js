@@ -25,9 +25,15 @@ export function parseLawBasis(text) {
   return { name: m[1], article: m[2] };
 }
 
-function coreToken(name) {
+export function coreToken(name) {
   const hit = ALIAS.find(([k]) => name.includes(k) || k.includes(name));
   return hit ? hit[1] : name.replace(/법(률)?$/, '');
+}
+
+// 로컬 수집본에 (법령명 코어토큰 + 조문번호)로 해당 조문이 있는지 — 자동수집 스킵 판정용
+export function findLocalArticle(name, article) {
+  if (!name || !article) return null;
+  return findArticle.get(article, `%${coreToken(name)}%`) || null;
 }
 
 // 수집된 laws에서 (법령명 코어토큰 + 조문번호)로 조문 찾기

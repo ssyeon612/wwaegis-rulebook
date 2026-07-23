@@ -3,7 +3,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import db from '../db.js';
-import { cleanKnowledge } from '../knowledge/index.js';
+import { cleanKnowledge, splitMeaningTags } from '../knowledge/index.js';
 
 const router = express.Router();
 const moduleId = 'IRST' + crypto.randomBytes(9).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 12).padEnd(12, '0');
@@ -59,13 +59,18 @@ router.post('/loadRuleSet', (req, res) => {
     responded_at: now(), module_id: moduleId, result: 'SUCCESS',
     ruleset: {
       meta: metaOf(rs), panel: panelOf(rs),
-      rules: rules.map((r) => ({
-        rule_id: r.rule_uid,
-        rule_version: '0.1.0',
-        content: { knowledge: cleanKnowledge(r.knowledge), title: r.title, severity: r.severity, references: r.law_basis ? [r.law_basis] : [] },
-        source_rule_id: r.source_rule_id,
-        matching: { bucket: 'TAGGING', required_speaker_role: r.speaker, required_meaning_tags: r.tag ? [r.tag] : [], required_action_tags: parseTags(r.action_tags) },
-      })),
+      rules: rules.map((r) => {
+        // knowledge 본문에 섞인 [추가 의미태그] 를 required_meaning_tags 로 옮긴다 (본문에는 남기지 않는다)
+        const { tags: extra } = splitMeaningTags(r.knowledge);
+        const meaningTags = [...new Set([...(r.tag ? [r.tag] : []), ...extra])];
+        return {
+          rule_id: r.rule_uid,
+          rule_version: '0.1.0',
+          content: { knowledge: cleanKnowledge(r.knowledge), title: r.title, severity: r.severity, references: r.law_basis ? [r.law_basis] : [] },
+          source_rule_id: r.source_rule_id,
+          matching: { bucket: 'TAGGING', required_speaker_role: r.speaker, required_meaning_tags: meaningTags, required_action_tags: parseTags(r.action_tags) },
+        };
+      }),
     },
   });
 });
