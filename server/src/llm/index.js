@@ -14,6 +14,16 @@ export function activeProvider() {
   return PROVIDER;
 }
 
+// 현재 provider가 실제로 쓰는 모델(버전) 문자열. ruleBased는 오프라인이라 없음(null).
+export function activeModel() {
+  switch (PROVIDER) {
+    case 'gemini': return process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+    case 'claude': return process.env.CLAUDE_MODEL || 'claude-sonnet-5';
+    case 'local': return process.env.LOCAL_LLM_MODEL || 'gemma2';
+    default: return null;
+  }
+}
+
 export async function analyzeDocument(doc, productName, hint) {
   // hint(담당자 보충 설명)는 LLM만 활용한다. 규칙기반은 키워드 매칭이라 반영할 지점이 없다.
   if (PROVIDER === 'ruleBased') return ruleBasedAnalyze(doc, productName);

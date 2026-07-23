@@ -1,0 +1,32 @@
+// 통일된 라인 아이콘 세트 — 이모지 대신 SVG. stroke=currentColor 라 색/활성/호버를 그대로 따른다.
+// 모두 24x24 viewBox · 동일 stroke-width · round cap/join 로 톤을 맞춘다.
+const PATHS = {
+  // 룰 편집 — 조항이 적힌 문서
+  rule: <><rect x="4" y="3.5" width="16" height="17" rx="2.5" /><path d="M8 9h8M8 12.5h8M8 16h5" /></>,
+  // 태그 관리 — 가격표 태그
+  tag: <><path d="M4 12.4l8-8a2 2 0 0 1 1.4-.6H19a1.5 1.5 0 0 1 1.5 1.5v5.6a2 2 0 0 1-.6 1.4l-8 8a1.9 1.9 0 0 1-2.7 0l-5.6-5.6a1.9 1.9 0 0 1 0-2.7z" /><circle cx="15.8" cy="8.2" r="1.4" /></>,
+  // 온톨로지 — 노드 그래프
+  onto: <><circle cx="6" cy="7" r="2.1" /><circle cx="18" cy="7" r="2.1" /><circle cx="12" cy="17.4" r="2.1" /><path d="M8.1 7h7.8M7.5 8.7l3.4 6.6M16.5 8.7l-3.4 6.6" /></>,
+  // 룰셋 관리 — 여러 겹의 레이어(룰셋 모음)
+  rulesets: <><path d="M12 3.2l8.2 4.3-8.2 4.3-8.2-4.3z" /><path d="M4 12l8 4.2 8-4.2M4 16.2l8 4.2 8-4.2" /></>,
+  // RS API — 코드 브래킷
+  api: <><path d="M9 8l-4 4 4 4M15 8l4 4-4 4M13.4 6l-2.8 12" /></>,
+  // 법령 관리 — 저울(균형)
+  law: <><path d="M12 4.2v15.6M7.5 19.8h9M5.5 7.5h13" /><path d="M5.5 7.5L3 12.6a2.5 2.5 0 0 0 5 0zM18.5 7.5L16 12.6a2.5 2.5 0 0 0 5 0z" /><circle cx="12" cy="4.2" r="1.1" /></>,
+  // 룰셋 생성 — 마법봉 + 반짝임
+  wand: <><path d="M4.8 19.2l9.4-9.4" /><path d="M15.6 3.8l.9 2.2 2.2.9-2.2.9-.9 2.2-.9-2.2-2.2-.9 2.2-.9z" /><path d="M6.2 5l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z" /></>,
+  // 생성/추가 (부가)
+  plus: <><path d="M12 5v14M5 12h14" /></>,
+  clip: <><path d="M20 11.5l-8.4 8.4a4 4 0 0 1-5.7-5.7l8.5-8.5a2.6 2.6 0 0 1 3.7 3.7l-8.5 8.5a1.2 1.2 0 0 1-1.7-1.7l7.8-7.8" /></>,
+  chevron: <><path d="M6 9.5l6 6 6-6" /></>,
+  check: <><path d="M5 12.5l4.5 4.5L19 7" /></>,
+};
+
+export function Icon({ name, size = 18 }) {
+  return (
+    <svg className="mic" viewBox="0 0 24 24" width={size} height={size} fill="none"
+      stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {PATHS[name] || null}
+    </svg>
+  );
+}

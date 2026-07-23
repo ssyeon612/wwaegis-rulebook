@@ -8,8 +8,12 @@ import { syncLaw } from './lawStore.js';
 
 const CRON = process.env.LAW_CHECK_CRON || '30 6 * * *'; // 기본: 매일 06:30
 let task = null;
-let lastRun = null;
 let running = false;
+
+const insRun = db.prepare(`INSERT INTO law_check_runs
+  (actor, started_at, finished_at, checked, changed, added, errors)
+  VALUES (@actor,@started_at,@finished_at,@checked,@changed,@added,@errors)`);
+const lastRunRow = db.prepare('SELECT * FROM law_check_runs ORDER BY id DESC LIMIT 1');
 
 // 수집된 법령 목록(law_key 중복 제거)을 다시 받아 변경 감지
 export async function runCheckNow(actor = 'scheduler') {
@@ -36,7 +40,12 @@ export async function runCheckNow(actor = 'scheduler') {
     summary.errors.push({ message: err.message });
   }
   summary.finished = new Date().toISOString();
-  lastRun = summary;
+  // 재시작에도 '마지막 업데이트'가 남도록 실행 결과를 영속화한다.
+  insRun.run({
+    actor, started_at: started, finished_at: summary.finished,
+    checked: summary.checked, changed: summary.changed, added: summary.added,
+    errors: summary.errors.length,
+  });
   running = false;
   return summary;
 }
@@ -48,11 +57,13 @@ export function startScheduler() {
 }
 
 export function schedulerInfo() {
+  const last = lastRunRow.get() || null;   // DB에서 — 재시작해도 유지
   return {
     cron: CRON,
     enabled: !!task,
     oc_configured: !!process.env.LAW_API_OC,
     running,
-    last_run: lastRun,
+    // { actor, started_at, finished_at, checked, changed, added, errors } | null
+    last_run: last,
   };
 }

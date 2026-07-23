@@ -21,17 +21,41 @@ function cronText(c) {
 }
 const ymd = (s) => (s && s.length === 8 ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6)}` : s || '—');
 
+// SQLite datetime('now')·JS ISO 는 둘 다 UTC — 로컬 'YYYY-MM-DD HH:mm' 로 표시한다.
+const p2 = (n) => String(n).padStart(2, '0');
+function toDate(s) {
+  if (!s) return null;
+  const d = new Date(String(s).includes('T') ? s : s.replace(' ', 'T') + 'Z');
+  return isNaN(d) ? null : d;
+}
+function localDT(s) {
+  const d = toDate(s);
+  return d ? `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}` : '—';
+}
+function relTime(s) {
+  const d = toDate(s);
+  if (!d) return '';
+  const sec = (Date.now() - d.getTime()) / 1000;
+  if (sec < 60) return '방금';
+  if (sec < 3600) return `${Math.floor(sec / 60)}분 전`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}시간 전`;
+  if (sec < 2592000) return `${Math.floor(sec / 86400)}일 전`;
+  return `${Math.floor(sec / 2592000)}개월 전`;
+}
+
 export default function Laws() {
   const [tab, setTab] = useState('collect');   // collect | updates
   const [pendingN, setPendingN] = useState(0);
   const [q, setQ] = useState('');
   const [results, setResults] = useState(null);
+  const [engine, setEngine] = useState(null);   // { engine, fallback } — 어느 검색 엔진이 응답했나
   const [collected, setCollected] = useState([]);
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState(null);      // {tone, text}
   const [openKey, setOpenKey] = useState(null);
   const [articles, setArticles] = useState({});
   const [sched, setSched] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);   // 수동 '법령 추가' 검색 패널 표시
 
   const loadCollected = () => api.lawList().then(setCollected);
   const loadSched = () => api.schedulerInfo().then(setSched).catch(() => {});
@@ -39,8 +63,12 @@ export default function Laws() {
   useEffect(() => { loadCollected(); loadSched(); loadPending(); }, []);
 
   async function search() {
-    setBusy('search'); setMsg(null); setResults(null);
-    try { setResults(await api.lawSearch(q)); }
+    setBusy('search'); setMsg(null); setResults(null); setEngine(null);
+    // 응답은 { engine, laws, fallback? } — 배열이 아니라 laws 를 꺼내 쓴다
+    try {
+      const r = await api.lawSearch(q);
+      setResults(r.laws || []); setEngine({ engine: r.engine, fallback: r.fallback });
+    }
     catch { setMsg({ tone: 'fail', text: '검색 실패 — LAW_API_OC(인증키)를 확인하세요.' }); }
     setBusy('');
   }
@@ -61,8 +89,14 @@ export default function Laws() {
     setBusy('check'); setMsg(null);
     const r = await api.checkNow();
     setBusy('');
-    setMsg({ tone: r.error ? 'fail' : 'pass', text: r.error ? r.message : `점검 완료 — 변경 ${r.changed ?? 0}건` });
-    loadCollected(); loadSched();
+    if (r.error) setMsg({ tone: 'fail', text: r.message });
+    else setMsg({
+      tone: r.changed > 0 ? 'warn' : 'pass',
+      text: r.changed > 0
+        ? `업데이트 완료 — 개정 ${r.changed}건 감지 · 아래 ‘개정 승인’에서 검토하세요`
+        : `업데이트 완료 — 변경 없음 (법령 ${r.checked ?? 0}건 점검)`,
+    });
+    loadCollected(); loadSched(); loadPending();
   }
   async function toggleArticles(lawKey) {
     if (openKey === lawKey) { setOpenKey(null); return; }
@@ -77,28 +111,9 @@ export default function Laws() {
 
   return (
     <div className="grid" style={{ gap: 16 }}>
-      {/* 스케줄러 상태 — 데이터는 이미 받고 있었는데 화면에 없었다 */}
-      {sched && (
-        <div className="schedbar">
-          <span className={'dot ' + (sched.enabled && sched.oc_configured ? 'on' : 'off')} />
-          <span className="k">자동 점검</span>
-          <span className="v">{sched.enabled && sched.oc_configured ? '켜짐' : '꺼짐'}</span>
-          <span className="sep" />
-          <span className="k">주기</span>
-          <span className="v" title={sched.cron}>{cronText(sched.cron)}</span>
-          <span className="sep" />
-          <span className="k">마지막</span>
-          <span className="v">{sched.last_run ? String(sched.last_run).slice(0, 16) : '실행 이력 없음'}</span>
-          <span className="spacer" />
-          <button className="btn sm" onClick={checkNow} disabled={busy === 'check' || !sched.oc_configured}>
-            {busy === 'check' ? '점검 중…' : '↻ 지금 점검'}
-          </button>
-        </div>
-      )}
-
-      {/* 수집과 승인은 둘 다 '법령' 작업이라 한 화면에서 탭으로 가른다 */}
-      <div className="seg">
-        <button className={tab === 'collect' ? 'on' : ''} onClick={() => setTab('collect')}>검색 · 수집</button>
+      {/* 수집·승인·이력은 둘 다 '법령' 작업이라 한 화면에서 탭으로 가른다 (밑줄형 탭) */}
+      <div className="ltabs">
+        <button className={tab === 'collect' ? 'on' : ''} onClick={() => setTab('collect')}>법령 현황</button>
         <button className={tab === 'updates' ? 'on' : ''} onClick={() => setTab('updates')}>
           개정 승인{pendingN > 0 && <span className="segbadge">{pendingN}</span>}
         </button>
@@ -118,13 +133,70 @@ export default function Laws() {
       )}
 
       {tab === 'collect' && <>
+      {/* ── 자동 업데이트 현황 (메인) — 마지막 점검일 · 지금 업데이트 · 승인 대기 ── */}
+      <div className={'au-hero' + (sched && sched.enabled && sched.oc_configured ? '' : ' off')}>
+        <div className="au-top">
+          <span className="au-ic">🔄</span>
+          <div className="au-h">
+            <h2>법령 자동 업데이트</h2>
+            <div className="sub">
+              {sched && sched.enabled && sched.oc_configured
+                ? <>수집된 법령 {collected.length}건을 <b>{cronText(sched.cron)}</b> 자동 점검해 개정을 감지합니다.</>
+                : <>자동 점검이 꺼져 있습니다 — 인증키를 설정하면 켜집니다.</>}
+            </div>
+          </div>
+          <span className="spacer" />
+          <button className="btn primary" onClick={checkNow} disabled={busy === 'check' || !(sched && sched.oc_configured)}>
+            {busy === 'check' ? '업데이트 중…' : '🔄 지금 업데이트'}
+          </button>
+        </div>
+
+        <div className="au-stats">
+          <div className="au-stat">
+            <span className="l">자동 점검</span>
+            <span className="v">
+              <span className={'dot ' + (sched && sched.enabled && sched.oc_configured ? 'on' : 'off')} />
+              {sched && sched.enabled && sched.oc_configured ? '켜짐' : '꺼짐'} · {cronText(sched && sched.cron)}
+            </span>
+          </div>
+          <div className="au-stat">
+            <span className="l">마지막 업데이트</span>
+            <span className="v">
+              {sched && sched.last_run
+                ? <><b>{localDT(sched.last_run.finished_at)}</b> <em>{relTime(sched.last_run.finished_at)}</em></>
+                : <span className="muted">아직 실행 안 됨</span>}
+            </span>
+          </div>
+          <div className="au-stat">
+            <span className="l">최근 점검 결과</span>
+            <span className="v">
+              {sched && sched.last_run
+                ? <>법령 {sched.last_run.checked} · 변경 <b className={sched.last_run.changed ? 'chg' : ''}>{sched.last_run.changed}</b> · 추가 {sched.last_run.added}
+                    {sched.last_run.errors > 0 && <span className="err"> · 오류 {sched.last_run.errors}</span>}</>
+                : <span className="muted">—</span>}
+            </span>
+          </div>
+        </div>
+
+        {pendingN > 0 && (
+          <button className="au-pending" onClick={() => setTab('updates')}>
+            <span className="badge draft"><i />개정 {pendingN}건 승인 대기</span>
+            <span className="txt">자동 감지된 변경입니다 — 검토 후 반영하세요</span>
+            <span className="go">검토하기 →</span>
+          </button>
+        )}
+      </div>
+
+      {/* ── 수동 검색·추가 (2차) — 새 법령을 추적 목록에 넣을 때만 편다 ── */}
+      {showAdd && (
       <div className="card">
         <div className="card-h">
           <div>
-            <h2>법령 검색 · 수집</h2>
-            <div className="sub">룰의 근거가 될 법령을 조문 단위로 수집합니다. 이후 개정은 자동 점검이 추적합니다.</div>
+            <h2>＋ 법령 추가</h2>
+            <div className="sub">추적할 법령을 검색해 수집하면, 이후부터 자동 점검이 개정을 추적합니다.</div>
           </div>
-          <span className="tag">국가법령정보센터 OPEN API</span>
+          <span className="tag">korean-law-mcp · 국가법령정보센터</span>
+          <button className="btn sm ghost" style={{ marginLeft: 8 }} onClick={() => { setShowAdd(false); setResults(null); }}>닫기</button>
         </div>
         <div className="card-b">
           <div className="row">
@@ -142,7 +214,15 @@ export default function Laws() {
 
           {results && (results.length === 0
             ? <div className="muted" style={{ fontSize: 12.5, marginTop: 14 }}>검색 결과가 없습니다. 법령명 일부만 넣어 보세요(예: “금융소비자”).</div>
-            : <table className="tbl rows" style={{ marginTop: 14 }}>
+            : <>
+              {engine && (
+                <div className="law-engine">
+                  {engine.engine === 'mcp'
+                    ? <><span className="dot on" /> korean-law-mcp 엔진 · {results.length}건</>
+                    : <><span className="dot" /> {engine.fallback ? 'MCP 실패 → 직접 호출 폴백' : '직접 호출'} · {results.length}건</>}
+                </div>
+              )}
+              <table className="tbl rows" style={{ marginTop: 10 }}>
                 <thead><tr>
                   <th>법령명</th><th style={{ width: 130 }}>소관부처</th><th style={{ width: 92 }}>구분</th>
                   <th style={{ width: 110 }}>시행일</th><th style={{ width: 108 }}></th>
@@ -154,7 +234,7 @@ export default function Laws() {
                         <b>{l.name}</b>
                         {!l.current && <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>연혁</span>}
                       </td>
-                      <td className="muted">{l.dept}</td>
+                      <td className="muted">{l.dept || '—'}</td>
                       <td className="muted">{l.kind}</td>
                       <td className="mono" style={{ fontSize: 11.5 }}>{ymd(l.effective)}</td>
                       <td style={{ textAlign: 'right' }}>
@@ -169,25 +249,29 @@ export default function Laws() {
                     </tr>
                   ))}
                 </tbody>
-              </table>)}
+              </table>
+            </>)}
         </div>
       </div>
+      )}
 
       <div className="card">
         <div className="card-h">
           <div>
-            <h2>수집된 법령</h2>
-            <div className="sub">조문을 펼쳐 본문을 확인하고, 룰에 연결된 조문을 볼 수 있습니다.</div>
+            <h2>추적 중인 법령</h2>
+            <div className="sub">자동 점검이 개정을 추적하는 법령입니다. 조문을 펼쳐 본문·연결 룰을 볼 수 있습니다.</div>
           </div>
+          <span className="spacer" />
           <span className="tag">{collected.length}건</span>
+          {!showAdd && <button className="btn sm" style={{ marginLeft: 8 }} onClick={() => setShowAdd(true)}>＋ 법령 추가</button>}
         </div>
         <div className="card-b" style={{ padding: 0 }}>
           {collected.length === 0
-            ? <div className="card-b muted">아직 수집된 법령이 없습니다. 위에서 검색해 수집하세요.</div>
+            ? <div className="card-b muted">추적 중인 법령이 없습니다. <button className="linklike" onClick={() => setShowAdd(true)}>＋ 법령 추가</button>로 시작하세요.</div>
             : <table className="tbl rows">
                 <thead><tr>
                   <th>법령명</th><th style={{ width: 78 }}>조문</th><th style={{ width: 92 }}>연결 룰</th>
-                  <th style={{ width: 110 }}>시행일</th><th style={{ width: 132 }}>최근 수집</th><th style={{ width: 150 }}></th>
+                  <th style={{ width: 110 }}>시행일</th><th style={{ width: 140 }}>마지막 점검</th><th style={{ width: 150 }}></th>
                 </tr></thead>
                 <tbody>
                   {collected.map((l) => (
@@ -202,7 +286,7 @@ export default function Laws() {
                           ? <span className="badge published"><i />{l.linked_rules}</span>
                           : <span className="muted" style={{ fontSize: 11.5 }}>없음</span>}</td>
                         <td className="mono" style={{ fontSize: 11.5 }}>{ymd(l.effective_date)}</td>
-                        <td className="muted mono" style={{ fontSize: 11 }}>{(l.fetched_at || '').slice(0, 16)}</td>
+                        <td className="dt"><b>{localDT(l.fetched_at)}</b><span>{relTime(l.fetched_at)}</span></td>
                         <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                           <button className="btn sm ghost" onClick={() => toggleArticles(l.law_key)}>
                             {openKey === l.law_key ? '접기' : '조문'}

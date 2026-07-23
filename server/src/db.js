@@ -95,6 +95,19 @@ CREATE TABLE IF NOT EXISTS law_updates (
   FOREIGN KEY(law_id) REFERENCES laws(id) ON DELETE CASCADE
 );
 
+-- 법령 점검 실행 기록 — 자동/수동 업데이트가 언제 돌았고 무엇이 바뀌었나.
+-- 메모리 변수로만 두면 서버 재시작 시 '마지막 업데이트' 날짜가 사라져 영속화한다.
+CREATE TABLE IF NOT EXISTS law_check_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  actor TEXT,                             -- scheduler | manual
+  started_at TEXT,
+  finished_at TEXT,
+  checked INTEGER DEFAULT 0,              -- 재조회한 법령 수
+  changed INTEGER DEFAULT 0,             -- 개정 감지된 조문 수
+  added INTEGER DEFAULT 0,               -- 신규 조문 수
+  errors INTEGER DEFAULT 0
+);
+
 -- 룰 ↔ 조문 연결 (N:M). law_basis 자유문자열을 대체하는 참조. (요구사항 3)
 CREATE TABLE IF NOT EXISTS rule_laws (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

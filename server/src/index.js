@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import db from './db.js';
-import { activeProvider } from './llm/index.js';
+import { activeProvider, activeModel } from './llm/index.js';
 import { PACKS } from './knowledge/index.js';
 import rulesets from './routes/rulesets.js';
 import rs from './routes/rs.js';
@@ -26,6 +26,7 @@ app.get('/api/status', (req, res) => {
   res.json({
     ok: true,
     provider: activeProvider(),
+    model: activeModel(),
     domains: Object.values(PACKS).map((p) => ({ id: p.id, label: p.label, icon: p.icon, reg: p.reg })),
     counts,
     scheduler: schedulerInfo(),

@@ -2,6 +2,7 @@
 import express from 'express';
 import db from '../db.js';
 import { searchLaws, fetchLawArticles } from '../services/lawApi.js';
+import { mcpSearchLaws, mcpEnabled } from '../services/mcpLaw.js';
 import { syncLaw, approveUpdate, rejectUpdate, listLaws, listArticles, listUpdates, lawHistory } from '../services/lawStore.js';
 import { runCheckNow, schedulerInfo } from '../services/scheduler.js';
 import { relinkRuleset } from '../services/lawLink.js';
@@ -10,9 +11,20 @@ const router = express.Router();
 const fail = (res, err) => res.status(400).json({ error: 'law_api_failed', message: err.message });
 
 // 법령 검색 (수집 대상 고르기)
+// 하이브리드: 기본은 korean-law-mcp 엔진(약칭·랭킹 이점). MCP 실패 시 기존 직파싱으로 폴백해
+// 검색이 절대 죽지 않게 한다. LAW_SEARCH_ENGINE=direct 면 처음부터 직접 호출.
 router.get('/search', async (req, res) => {
+  const q = req.query.q || '', n = Number(req.query.n) || 20;
   try {
-    res.json(await searchLaws(req.query.q || '', Number(req.query.n) || 20));
+    if (mcpEnabled()) {
+      try {
+        return res.json({ engine: 'mcp', laws: await mcpSearchLaws(q, n) });
+      } catch (mcpErr) {
+        console.warn('[law] MCP 검색 실패 → 직접 호출로 폴백:', mcpErr.message);
+        return res.json({ engine: 'direct', fallback: true, laws: await searchLaws(q, n) });
+      }
+    }
+    res.json({ engine: 'direct', laws: await searchLaws(q, n) });
   } catch (err) { fail(res, err); }
 });
 

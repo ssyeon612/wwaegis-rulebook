@@ -5,23 +5,19 @@ import { useWs } from '../lib/ws.js';
 
 const ICON = { finance: '🏦', securities: '📈', auto: '🚗', insurance: '🛡' };
 
-// 룰셋 워크스페이스 — 하는 일이 둘로 갈린다.
+// 룰 편집 — 하는 일이 둘로 갈린다.
 //  · 선택 모드: 기존 룰셋을 골라 룰을 검토·편집·게시  (상시)
 //  · 생성 모드: 내규를 올려 새 룰셋을 만들거나 기존에 추가 (가끔)
 // 두 작업이 섞이면 헷갈리므로 상단에서 모드를 명시적으로 가른다.
 export default function Workspace() {
-  // 모드·선택 룰셋은 앱 전역(사이드바)에서 관리한다. 여기선 소비만 한다.
-  const { rows, loadRows, mode, setMode, selId, sel, toSelect } = useWs();
-  const [createTarget, setCreateTarget] = useState(null); // 있으면 기존 룰셋에 추가
+  // 모드·선택 룰셋·추가 대상은 앱 전역(사이드바)에서 관리한다. 여기선 소비만 한다.
+  const { rows, loadRows, mode, setMode, selId, sel, toSelect, createTarget, setCreateTarget } = useWs();
   const [detail, setDetail] = useState(null);
 
   useEffect(() => {
     if (mode === 'select' && selId) api.getRuleset(selId).then(setDetail);
     else setDetail(null);
   }, [mode, selId]);
-
-  // 생성 모드를 벗어나면 추가 대상은 해제
-  useEffect(() => { if (mode !== 'create') setCreateTarget(null); }, [mode]);
 
   async function afterCreate(rsId) {
     await loadRows();
@@ -36,10 +32,14 @@ export default function Workspace() {
     return (
       <>
         {createTarget && (
-          <div className="wsbar">
-            <span className="meta">기존 룰셋에 추가 — <b>{sel?.name}</b></span>
+          <div className="addbar">
+            <span className="ic">＋</span>
+            <div className="txt">
+              <b>기존 룰셋에 추가하는 중</b>
+              <span>분석된 룰이 <em>{sel?.name}</em>에 병합됩니다 · 중복 개념은 자동 제외</span>
+            </div>
             <span className="spacer" />
-            <button className="btn sm ghost" onClick={() => { setCreateTarget(null); toSelect(); }}>취소</button>
+            <button className="btn sm" onClick={() => { setCreateTarget(null); toSelect(); }}>← 추가 취소</button>
           </div>
         )}
         <CreatePanel target={createTarget} targetName={sel?.name} onDone={afterCreate} />
@@ -92,17 +92,42 @@ function CreatePanel({ target, targetName, onDone }) {
   }
 
   return (
-    <div className="card">
+    // 추가 모드는 강조 테두리로 새 룰셋 생성과 구분한다 (위 배너와 색을 맞춤)
+    <div className={'card' + (target ? ' cp-add' : '')}>
       <div className="card-h">
         <div>
-          <h2>{target ? `내규 추가 — ${targetName}` : '새 룰셋 생성'}</h2>
+          <h2>{target ? `📎 내규 업로드 → ${targetName}` : '새 룰셋 생성'}</h2>
           <div className="sub">{target
-            ? '이 내규의 룰을 선택한 룰셋에 추가합니다 (중복 개념 자동 제외).'
+            ? '아래에서 내규를 올리면 룰을 뽑아 이 룰셋에 더합니다.'
             : '내규를 올리면 도메인을 자동 판별하고 관련 법령을 붙여 룰셋을 만듭니다.'}</div>
         </div>
       </div>
       <div className="card-b">
         <div className="cp-grid">
+          {/* 왼쪽 — 문서명 · AI 보충 설명 (메타데이터) */}
+          <div className="cp-meta">
+            {src === 'text' && (
+              <>
+                <label className="flabel">문서명 (선택)</label>
+                <input className="fld" value={docName} onChange={(e) => setDocName(e.target.value)}
+                  placeholder="예: 완전판매 체크리스트" style={{ marginBottom: 14 }} />
+              </>
+            )}
+
+            {!target && src === 'file' && (
+              <>
+                <label className="flabel">문서명 (선택)</label>
+                <input className="fld" value={prodName} onChange={(e) => setProdName(e.target.value)}
+                  placeholder="예: 완전판매 체크리스트" style={{ marginBottom: 14 }} />
+              </>
+            )}
+
+            <label className="flabel">AI 보충 설명 (선택)</label>
+            <textarea className="fld hint" value={hint} onChange={(e) => setHint(e.target.value)}
+              placeholder={'예) 대면 판매만 함 · "핵심설명서"=상품설명서 · 고령자 만 65세 이상'} />
+          </div>
+
+          {/* 오른쪽 — 내규 입력 + 실행 */}
           <div className="cp-main">
             <div className="seg eq" style={{ marginBottom: 12 }}>
               <button className={src === 'file' ? 'on' : ''} onClick={() => { setSrc('file'); setErr(''); }}>📄 파일 업로드</button>
@@ -127,37 +152,14 @@ function CreatePanel({ target, targetName, onDone }) {
                 </div>
               </>
             )}
-          </div>
 
-          <div className="side">
-            {src === 'text' && (
-              <>
-                <label className="flabel">문서명 (선택)</label>
-                <input className="fld" value={docName} onChange={(e) => setDocName(e.target.value)}
-                  placeholder="예: 완전판매 체크리스트" style={{ marginBottom: 14 }} />
-              </>
-            )}
-
-            {!target && src === 'file' && (
-              <>
-                <label className="flabel">문서명 (선택)</label>
-                <input className="fld" value={prodName} onChange={(e) => setProdName(e.target.value)}
-                  placeholder="예: 완전판매 체크리스트" style={{ marginBottom: 14 }} />
-              </>
-            )}
-
-            <label className="flabel">AI 보충 설명 (선택)</label>
-            <textarea className="fld" value={hint} onChange={(e) => setHint(e.target.value)}
-              style={{ minHeight: 120, marginBottom: 14 }}
-              placeholder={'예) 대면 판매만 함 · "핵심설명서"=상품설명서 · 고령자 만 65세 이상'} />
-
-            <div className="warn" style={{ fontSize: 11.5, marginBottom: 14 }}>
+            <div className="warn" style={{ fontSize: 11.5, margin: '14px 0' }}>
               {src === 'text'
                 ? <><b>한 줄에 한 조항</b>씩 적어주세요. 줄 단위로 개념을 식별해 룰을 만듭니다.</>
                 : <>스캔 PDF는 텍스트를 뽑을 수 없습니다. 그럴 땐 <b>직접 입력</b>을 쓰세요.</>}
             </div>
 
-            {err && <div className="warn" style={{ background: 'var(--fail-bg)', borderColor: 'var(--fail-line)', color: 'var(--fail)' }}>⚠ {err}</div>}
+            {err && <div className="warn" style={{ background: 'var(--fail-bg)', borderColor: 'var(--fail-line)', color: 'var(--fail)', marginBottom: 14 }}>⚠ {err}</div>}
 
             <button className="btn primary" disabled={busy || !ready} onClick={run}
               style={{ width: '100%', justifyContent: 'center' }}>
