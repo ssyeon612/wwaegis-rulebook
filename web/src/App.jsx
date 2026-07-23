@@ -92,18 +92,24 @@ export default function App() {
               </>
             ) : (
               <>
-                <div className="sec">선택한 룰셋</div>
-                <select className="navsel" value={selId ?? ''} onChange={(e) => setSelId(Number(e.target.value))}>
-                  {(rows || []).map((r) => (
-                    <option key={r.id} value={r.id}>{ICON[r.domain] || '📄'} {r.name}</option>
-                  ))}
-                </select>
-                {sel && (
-                  <div className="navmeta">
-                    <span className={'badge ' + sel.status}><i />{sel.status === 'published' ? '게시됨' : '초안'}</span>
-                    <span>룰 {sel.rule_count} · 승인 {sel.approved_count}</span>
+                <div className="rscard">
+                  <span className="rscard-lbl">선택한 룰셋</span>
+                  <div className="rscard-selwrap">
+                    <span className="rscard-ic">{ICON[sel?.domain] || '📄'}</span>
+                    <select className="rscard-sel" value={selId ?? ''} onChange={(e) => setSelId(Number(e.target.value))}>
+                      {(rows || []).map((r) => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
                   </div>
-                )}
+                  {sel && (
+                    <div className="rscard-meta">
+                      <span className={'badge ' + sel.status}><i />{sel.status === 'published' ? '게시됨' : '초안'}</span>
+                      <span className="rscard-cnt">룰 {sel.rule_count} · 승인 {sel.approved_count}</span>
+                    </div>
+                  )}
+                </div>
+                {/* 룰셋 스코프 — 선택된 룰셋을 대상으로 동작한다 */}
                 <NavLink to="/" end className={({ isActive }) => isActive ? 'on' : ''}>
                   <span className="ic">☰</span>룰 편집
                 </NavLink>
@@ -112,14 +118,17 @@ export default function App() {
                     <span className="ic">🏷</span>태그 관리
                   </NavLink>
                 )}
-                <NavLink to="/api" className={({ isActive }) => isActive ? 'on' : ''}>
-                  <span className="ic">↔</span>RS API
-                </NavLink>
                 {sel && (
                   <NavLink to={`/rulesets/${sel.id}/graph`} className={({ isActive }) => isActive ? 'on' : ''}>
                     <span className="ic">◈</span>온톨로지
                   </NavLink>
                 )}
+
+                {/* 공통 — 선택된 룰셋에 영향받지 않는다 */}
+                <div className="sec">공통</div>
+                <NavLink to="/api" className={({ isActive }) => isActive ? 'on' : ''}>
+                  <span className="ic">↔</span>RS API
+                </NavLink>
                 <NavLink to="/laws" className={({ isActive }) => isActive ? 'on' : ''}>
                   <span className="ic">⚖</span>법령 관리
                 </NavLink>

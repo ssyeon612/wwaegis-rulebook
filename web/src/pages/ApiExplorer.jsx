@@ -24,11 +24,33 @@ export default function ApiExplorer() {
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState(null);      // { data, ms, bytes, error }
 
-  const cfg = ENDPOINTS[ep];
-  const body = useMemo(() => (ep === 'list' ? {} : { ruleset_id: sel?.ruleset_id || '' }), [ep, sel]);
+  // loadRuleSet 대상은 이 탭에서 직접 고른다 — 사이드바 전역 선택(sel)과 무관하다.
+  // 로드 가능한 건 게시본뿐이므로 listRuleSets 결과(게시 룰셋)로 채운다.
+  const [pubList, setPubList] = useState(null);   // [{ id, name, count }] | null(로딩)
+  const [loadId, setLoadId] = useState('');
 
-  const published = !!sel?.ruleset_id && sel.status === 'published';
-  const blocked = cfg.needsRuleset && !published;
+  useEffect(() => {
+    api.rsList({})
+      .then((d) => setPubList((d?.rulesets || []).map((r) => ({
+        id: r.meta.ruleset_id, name: r.meta.ruleset_name, count: r.rule_count,
+      }))))
+      .catch(() => setPubList([]));
+  }, []);
+
+  // 기본 선택: 현재 선택값 유지 → 사이드바 룰셋이 게시본이면 그걸 → 아니면 첫 게시본.
+  useEffect(() => {
+    if (!pubList) return;
+    setLoadId((cur) => {
+      if (cur && pubList.some((r) => r.id === cur)) return cur;
+      if (sel?.ruleset_id && pubList.some((r) => r.id === sel.ruleset_id)) return sel.ruleset_id;
+      return pubList[0]?.id || '';
+    });
+  }, [pubList, sel]);
+
+  const cfg = ENDPOINTS[ep];
+  const body = useMemo(() => (ep === 'list' ? {} : { ruleset_id: loadId || '' }), [ep, loadId]);
+
+  const blocked = cfg.needsRuleset && !loadId;
 
   async function run() {
     setBusy(true); setRes(null);
@@ -62,21 +84,23 @@ export default function ApiExplorer() {
             </div>
             <div className="epdesc">{cfg.desc}</div>
 
-            {/* 대상 룰셋은 사이드바에서 고른 것을 그대로 쓴다 — 여기서 다시 고르지 않는다. */}
+            {/* 대상 룰셋은 이 탭에서 직접 고른다 — 사이드바 전역 선택에는 영향을 주지 않는다. */}
             {cfg.needsRuleset && (
-              !sel ? (
-                <div className="warn">사이드바 <b>선택 모드</b>에서 룰셋을 먼저 고르세요.</div>
-              ) : !published ? (
+              pubList && pubList.length === 0 ? (
                 <div className="warn">
-                  <b>{sel.name}</b>은(는) 아직 게시되지 않았습니다. 게시본만 응답하므로,
+                  게시된 룰셋이 없습니다. 게시본만 응답하므로,
                   <Link to="/" style={{ color: 'var(--amber)', fontWeight: 700, textDecoration: 'underline' }}> 룰 편집</Link>에서 승인 후 게시하세요.
                 </div>
               ) : (
                 <div className="tgt">
                   <span className="k">대상 룰셋</span>
-                  <b>{sel.name}</b>
-                  <span className="mono">{sel.ruleset_id}</span>
-                  <span className="muted">승인 룰 {sel.approved_count}</span>
+                  <select className="fld" value={loadId} onChange={(e) => setLoadId(e.target.value)}
+                    style={{ flex: '1 1 auto', minWidth: 0 }} disabled={!pubList}>
+                    {!pubList && <option value="">불러오는 중…</option>}
+                    {(pubList || []).map((r) => (
+                      <option key={r.id} value={r.id}>{r.name} · {r.id} (승인 룰 {r.count})</option>
+                    ))}
+                  </select>
                 </div>
               )
             )}

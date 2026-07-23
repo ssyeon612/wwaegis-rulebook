@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { parseActionTags } from '../lib/standardTags.js';
 
@@ -26,32 +26,14 @@ export default function RulesetTags() {
 
   return (
     <div className="tagmgr">
-      <div className="card">
-        <div className="card-h">
-          <div>
-            <h2>🏷 태그 관리 — {rs.name}</h2>
-            <div className="sub">이 룰셋은 표준을 복제한 <b>자체 태그 사전</b>을 가집니다. 여기서 자유롭게 편집합니다.</div>
-          </div>
-          <span className="spacer" />
-          <Link className="btn sm ghost" to="/">← 룰 편집</Link>
+      {/* 요약 카드는 사이드바(룰셋명·룰 편집)와 상단바(제목)와 겹쳐 제거했다.
+          다만 '사전 밖 코드' 경고는 실제 오류 신호이므로 사전 카드 위에 살려 둔다. */}
+      {orphans.length > 0 && (
+        <div className="tm-warn standalone">
+          ⚠ 룰이 쓰는데 이 룰셋 사전에 없는 코드가 있습니다 —{' '}
+          <b>{orphans.map((o) => o.code).join(', ')}</b>. 아래에서 사전에 추가하거나 표준 코드로 교정하세요.
         </div>
-
-        {/* 지표는 그리드로 — flex+wrap 이면 라벨 줄 수에 따라 칸 높이가 제각각이 된다 */}
-        <div className="tm-metrics">
-          <Metric n={M.length} l="사전 태그" s={`사용 ${usedM.length} · 미사용 ${M.length - usedM.length}`} />
-          <Metric n={customM.length} l="신규(custom)" s="표준에 없는 코드" warn={customM.length > 0} />
-          <Metric n={orphans.length} l="사전 밖 코드" s="룰이 쓰는데 사전에 없음" bad={orphans.length > 0} />
-          <Metric n={activeA.length} l="행위태그(활성)" s={`전체 ${A.length}`} />
-          <Metric n={noAction.length} l="행위태그 없는 룰" s={`전체 ${rules.length}`} warn={noAction.length > 0} />
-        </div>
-
-        {orphans.length > 0 && (
-          <div className="tm-warn">
-            ⚠ 룰이 쓰는데 이 룰셋 사전에 없는 코드가 있습니다 —{' '}
-            <b>{orphans.map((o) => o.code).join(', ')}</b>. 아래에서 사전에 추가하거나 표준 코드로 교정하세요.
-          </div>
-        )}
-      </div>
+      )}
 
       {/* 사전 — 의미 / 행위 탭 전환 (위아래 대신 한 카드에서 교체) */}
       <div className="card">
@@ -72,18 +54,6 @@ export default function RulesetTags() {
           ? <MeaningDict M={M} usedM={usedM} customM={customM} rules={rules} rulesetId={id} onChange={load} />
           : <ActionDict A={A} activeA={activeA} rules={rules} noAction={noAction} rulesetId={id} onChange={load} />}
       </div>
-    </div>
-  );
-}
-
-function Metric({ n, l, s, bad, warn }) {
-  return (
-    // 상태는 lv- 접두사 — 전역 .warn 은 박스 스타일(margin-bottom:14px)이라
-    // 그대로 쓰면 그 칸만 아래 여백이 붙어 그리드 행이 통째로 14px 커진다.
-    <div className={'tm-metric' + (bad ? ' lv-bad' : warn ? ' lv-warn' : '')}>
-      <div className="v">{n}</div>
-      <div className="l">{l}</div>
-      {s && <div className="s">{s}</div>}
     </div>
   );
 }

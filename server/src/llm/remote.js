@@ -1,7 +1,7 @@
 // 원격/로컬 LLM 어댑터 (local · gemini · claude 공용)
 // 실제 호출부는 provider별 엔드포인트만 다르고, 프롬프트·후처리는 공통.
 // ※ 폐쇄망 정책(F1-6): gemini/claude는 데이터가 외부로 나가므로 준법 승인 후에만 사용.
-import { detectDomain, mapConcepts, buildKnowledge, deriveActionTags, PACKS } from '../knowledge/index.js';
+import { detectDomain, mapConcepts, buildKnowledge, deriveActionTags, PACKS, cleanKnowledge } from '../knowledge/index.js';
 
 const ENDPOINTS = {
   local: () => ({
@@ -119,8 +119,8 @@ const K_LABELS = [
 ];
 function composeKnowledge(k) {
   if (!k) return '';
-  if (typeof k === 'string') return k;
-  return K_LABELS.filter(([f]) => k[f]).map(([f, label]) => `[${label}] ${k[f]}`).join('\n');
+  if (typeof k === 'string') return cleanKnowledge(k);
+  return cleanKnowledge(K_LABELS.filter(([f]) => k[f]).map(([f, label]) => `[${label}] ${k[f]}`).join('\n'));
 }
 
 export async function llmAnalyze(provider, doc, productName, hint) {

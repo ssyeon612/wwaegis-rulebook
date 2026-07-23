@@ -63,7 +63,6 @@ function CreatePanel({ target, targetName, onDone }) {
   const [text, setText] = useState('');
   const [docName, setDocName] = useState('');
   const [prodName, setProdName] = useState('');   // STT 목록 표시 상품명
-  const [prodId, setProdId] = useState('');        // 외부 상품마스터 코드(선택)
   const [hint, setHint] = useState('');
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -82,9 +81,8 @@ function CreatePanel({ target, targetName, onDone }) {
         if (docName.trim()) form.append('name', docName.trim());
       }
       if (hint.trim()) form.append('hint', hint);
-      // 상품명·상품코드는 새 룰셋을 만들 때만 의미 있다(추가 모드는 대상 룰셋에 이미 있음).
-      if (!target && prodName.trim()) form.append('productName', prodName.trim());
-      if (!target && prodId.trim()) form.append('product_id', prodId.trim());
+      // 상품명은 파일 업로드로 새 룰셋을 만들 때만 받는다(직접 입력·추가 모드는 제외).
+      if (!target && src === 'file' && prodName.trim()) form.append('productName', prodName.trim());
       if (target) form.append('target_ruleset_id', String(target));
       const res = await api.extract(form);
       if (res.error) { setErr(res.message || res.error); setBusy(false); return; }
@@ -136,18 +134,15 @@ function CreatePanel({ target, targetName, onDone }) {
               <>
                 <label className="flabel">문서명 (선택)</label>
                 <input className="fld" value={docName} onChange={(e) => setDocName(e.target.value)}
-                  placeholder="예: 완전판매 체크리스트 v2" style={{ marginBottom: 14 }} />
+                  placeholder="예: 완전판매 체크리스트" style={{ marginBottom: 14 }} />
               </>
             )}
 
-            {!target && (
+            {!target && src === 'file' && (
               <>
-                <label className="flabel">상품명 (선택) — STT 목록 표시명</label>
+                <label className="flabel">문서명 (선택)</label>
                 <input className="fld" value={prodName} onChange={(e) => setProdName(e.target.value)}
-                  placeholder="예: OO증권 ELS 12345호" style={{ marginBottom: 14 }} />
-                <label className="flabel">상품코드 (선택) — 외부 상품마스터</label>
-                <input className="fld mono" value={prodId} onChange={(e) => setProdId(e.target.value)}
-                  placeholder="예: PRD-2026-0417" style={{ marginBottom: 14 }} />
+                  placeholder="예: 완전판매 체크리스트" style={{ marginBottom: 14 }} />
               </>
             )}
 
@@ -535,8 +530,10 @@ function RuleRow({ r, i, open, checked, onCheck, onToggle, onPatch, onDel }) {
         <td className="ck"><input type="checkbox" checked={checked} onChange={onCheck} /></td>
         <td className="mono muted">{String(i + 1).padStart(2, '0')}</td>
         <td>
-          <span className="chip mono">{r.tag}</span>
-          <ActionTags v={r.action_tags} />
+          <div className="tagcell">
+            <span className="chip mono">{r.tag}</span>
+            <ActionTags v={r.action_tags} />
+          </div>
         </td>
         <td className="ttl">
           {r.title}

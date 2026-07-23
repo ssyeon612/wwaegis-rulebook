@@ -3,6 +3,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import db from '../db.js';
+import { cleanKnowledge } from '../knowledge/index.js';
 
 const router = express.Router();
 const moduleId = 'IRST' + crypto.randomBytes(9).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 12).padEnd(12, '0');
@@ -16,8 +17,9 @@ function parseTags(s) {
 
 function metaOf(rs) {
   return {
-    // product_id/product_name 은 STT 목록 표시·외부 상품마스터 참조용. 로드 매칭 키는 ruleset_id 다.
-    product_id: rs.product_id || '(외부 상품 마스터)',
+    // product_name 은 STT 목록 표시용. 로드 매칭 키는 ruleset_id 다.
+    // product_id 는 외부 상품마스터 자리표시자(이 시스템에서 소비 안 함).
+    product_id: '(외부 상품 마스터)',
     product_name: rs.product_name || rs.name,
     ruleset_id: rs.ruleset_id,
     ruleset_name: rs.name,
@@ -60,7 +62,7 @@ router.post('/loadRuleSet', (req, res) => {
       rules: rules.map((r) => ({
         rule_id: r.rule_uid,
         rule_version: '0.1.0',
-        content: { knowledge: r.knowledge, title: r.title, severity: r.severity, references: r.law_basis ? [r.law_basis] : [] },
+        content: { knowledge: cleanKnowledge(r.knowledge), title: r.title, severity: r.severity, references: r.law_basis ? [r.law_basis] : [] },
         source_rule_id: r.source_rule_id,
         matching: { bucket: 'TAGGING', required_speaker_role: r.speaker, required_meaning_tags: r.tag ? [r.tag] : [], required_action_tags: parseTags(r.action_tags) },
       })),

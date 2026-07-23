@@ -50,6 +50,29 @@ export function deriveActionTags(text) {
   return out.slice(0, 4);
 }
 
+// knowledge 본문에 섞인, 화면에 노출하지 않을 자동 생성 메타/placeholder 를 제거한다.
+//  · [부류] TAGGING · [체크리스트 항목] 02-01  → 서빙 메타가 본문에 섞인 줄 (통째로 제거)
+//  · [근거] — 본 매뉴얼 내부 조문 (외부 법령 미연결) → 외부 법령이 없을 때의 placeholder
+//    (실제 법령이 함께 있으면 그 부분은 남기고, 라벨만 남으면 줄 자체를 버린다)
+export function cleanKnowledge(knowledge) {
+  if (!knowledge || typeof knowledge !== 'string') return knowledge;
+  const out = [];
+  for (let line of knowledge.split('\n')) {
+    // 서빙 메타 줄 — [부류]/[체크리스트 항목] 으로 시작하면 통째로 제거
+    if (/^\s*\[(부류|체크리스트\s*항목)\]/.test(line)) continue;
+    if (/본\s*매뉴얼\s*내부\s*조문|외부\s*법령\s*미연결/.test(line)) {
+      line = line
+        .replace(/\(\s*(외부\s*)?법령\s*미연결\s*\)/g, '')
+        .replace(/[—·\-.]*\s*본\s*매뉴얼\s*내부\s*조문\s*\.?/g, '')
+        .replace(/[\s—·\-.]+$/g, '')
+        .trimEnd();
+      if (/^\s*\[근거\]\s*$/.test(line)) continue; // 라벨만 남으면 줄 제거
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
 export function lawOf(domain, tag) {
   const k = PACKS[domain]?.klib[tag];
   if (!k) return '';

@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import db from '../db.js';
 import { parseFile } from '../services/parsers.js';
 import { analyzeDocument, activeProvider } from '../llm/index.js';
-import { PACKS } from '../knowledge/index.js';
+import { PACKS, cleanKnowledge } from '../knowledge/index.js';
 import { linkRuleToLaw, lawsForRule } from '../services/lawLink.js';
 import { logChange, logRuleEdit, ruleHistory, rulesetHistory } from '../services/history.js';
 import { buildGraph, provenance, ensureChunks, linkRulesToChunks } from '../services/graph.js';
@@ -60,7 +60,6 @@ router.post('/extract', upload.single('file'), async (req, res) => {
       return res.status(422).json({ error: 'empty', message: '내용을 추출하지 못했습니다. PDF 스캔본이면 서버측 OCR가 필요합니다.' });
     }
     const productName = (req.body.productName || '').trim();
-    const productId = (req.body.product_id || '').trim();  // 외부 상품마스터 코드(선택) — 표시·참조용, 매칭 키 아님
     const hint = (req.body.hint || '').trim();
     const target = req.body.target_ruleset_id ? Number(req.body.target_ruleset_id) : null;
     const analysis = await analyzeDocument(content, productName, hint);
@@ -78,8 +77,8 @@ router.post('/extract', upload.single('file'), async (req, res) => {
       const pack = PACKS[analysis.domain];
       // 상품명이 있으면 STT 목록에 뜨는 이름으로 쓴다 — 없으면 도메인 기본명.
       const rsName = productName ? `${productName} 룰셋` : `${pack.label} 내규 룰셋`;
-      const rs = db.prepare('INSERT INTO rulesets (name, domain, engine, document_id, source_hint, product_id, product_name) VALUES (?,?,?,?,?,?,?)')
-        .run(rsName, analysis.domain, analysis.engine, docRow.lastInsertRowid, hint || null, productId || null, productName || null);
+      const rs = db.prepare('INSERT INTO rulesets (name, domain, engine, document_id, source_hint, product_name) VALUES (?,?,?,?,?,?)')
+        .run(rsName, analysis.domain, analysis.engine, docRow.lastInsertRowid, hint || null, productName || null);
       rulesetId = rs.lastInsertRowid;
     }
 
@@ -156,7 +155,8 @@ router.get('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const rs = db.prepare('SELECT * FROM rulesets WHERE id=?').get(req.params.id);
   if (!rs) return res.status(404).json({ error: 'not_found' });
-  rs.rules = db.prepare('SELECT * FROM rules WHERE ruleset_id=? ORDER BY order_idx').all(req.params.id);
+  rs.rules = db.prepare('SELECT * FROM rules WHERE ruleset_id=? ORDER BY order_idx').all(req.params.id)
+    .map((r) => ({ ...r, knowledge: cleanKnowledge(r.knowledge) }));
   res.json(rs);
 });
 
