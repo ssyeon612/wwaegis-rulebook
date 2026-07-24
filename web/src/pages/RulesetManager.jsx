@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useWs } from '../lib/ws.js';
+import { useAuth } from '../lib/auth.jsx';
 
 // 룰셋 관리 — 전체 룰셋을 한 표에서 보고, 이름을 인라인으로 바꾼다.
 // 데이터는 앱 전역 rows(listRulesets)를 그대로 쓰고, 변경 후 loadRows 로 사이드바까지 갱신한다.
@@ -27,6 +28,7 @@ function relTime(s) {
 
 export default function RulesetManager() {
   const { rows, loadRows, toSelect } = useWs();
+  const { canWrite } = useAuth();
   const nav = useNavigate();
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('all');   // all | published | draft
@@ -121,7 +123,7 @@ export default function RulesetManager() {
                 </tr></thead>
                 <tbody>
                   {view.map((r) => (
-                    <Row key={r.id} r={r} busy={busy === r.id} menu={menu === r.id}
+                    <Row key={r.id} r={r} busy={busy === r.id} menu={menu === r.id} canWrite={canWrite}
                       onRename={(name) => rename(r.id, name)}
                       onOpen={() => toSelect(r.id)}
                       onMenu={() => setMenu(menu === r.id ? null : r.id)}
@@ -167,7 +169,7 @@ function Stat({ n, l, tone }) {
   return <div className={'rsm-stat' + (tone ? ' ' + tone : '')}><b>{n}</b><span>{l}</span></div>;
 }
 
-function Row({ r, busy, menu, onRename, onOpen, onMenu, onGraph, onTags, onDel }) {
+function Row({ r, busy, menu, canWrite, onRename, onOpen, onMenu, onGraph, onTags, onDel }) {
   const [edit, setEdit] = useState(false);
   const [name, setName] = useState(r.name);
   useEffect(() => { setName(r.name); }, [r.name]);
@@ -180,7 +182,9 @@ function Row({ r, busy, menu, onRename, onOpen, onMenu, onGraph, onTags, onDel }
     <tr>
       <td className="rsm-name">
         {/* 이름은 평소 텍스트 — 클릭하면 입력창으로 바뀐다 */}
-        {edit ? (
+        {!canWrite ? (
+          <b>{r.name}</b>
+        ) : edit ? (
           <input className="fld sm" style={{ width: '100%', maxWidth: 380 }} value={name} autoFocus disabled={busy}
             onChange={(e) => setName(e.target.value)} onBlur={save}
             onKeyDown={(e) => e.key === 'Enter' ? e.currentTarget.blur() : e.key === 'Escape' && (setName(r.name), setEdit(false))} />
@@ -205,7 +209,7 @@ function Row({ r, busy, menu, onRename, onOpen, onMenu, onGraph, onTags, onDel }
               <div className="kmenu" onClick={(e) => e.stopPropagation()}>
                 <button onClick={onTags}>태그 관리</button>
                 <button onClick={onGraph}>온톨로지</button>
-                <button className="danger" onClick={onDel}>삭제</button>
+                {canWrite && <button className="danger" onClick={onDel}>삭제</button>}
               </div>
             )}
           </div>

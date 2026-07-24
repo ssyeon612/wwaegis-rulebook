@@ -2,23 +2,31 @@
 // 실제 호출부는 provider별 엔드포인트만 다르고, 프롬프트·후처리는 공통.
 // ※ 폐쇄망 정책(F1-6): gemini/claude는 데이터가 외부로 나가므로 준법 승인 후에만 사용.
 import { detectDomain, mapConcepts, buildKnowledge, deriveActionTags, PACKS, cleanKnowledge } from '../knowledge/index.js';
+import { byId, modelOf, keyOf } from './providers.js';
 
+// provider별 엔드포인트. 모델·API 키는 providers.js 가 설정→.env→기본값으로 해석한다.
 const ENDPOINTS = {
   local: () => ({
     url: (process.env.LOCAL_LLM_URL || 'http://localhost:11434') + '/api/chat',
-    model: process.env.LOCAL_LLM_MODEL || 'gemma2',
+    model: modelOf('local'),
     kind: 'ollama',
   }),
   gemini: () => ({
-    url: `https://generativelanguage.googleapis.com/v1beta/models/${process.env.GEMINI_MODEL || 'gemini-2.0-flash'}:generateContent?key=${process.env.GEMINI_API_KEY || ''}`,
+    url: `https://generativelanguage.googleapis.com/v1beta/models/${modelOf('gemini')}:generateContent?key=${keyOf('gemini')}`,
     kind: 'gemini',
+    authKey: keyOf('gemini'),
   }),
   claude: () => ({
     url: 'https://api.anthropic.com/v1/messages',
-    model: process.env.CLAUDE_MODEL || 'claude-sonnet-5',
+    model: modelOf('claude'),
     kind: 'claude',
+    authKey: keyOf('claude'),
   }),
 };
+// OpenAI 호환(/chat/completions) — openai · grok · mistral · deepseek …
+for (const p of Object.values(byId)) {
+  if (p.base) ENDPOINTS[p.id] = () => ({ url: p.base + '/chat/completions', model: modelOf(p.id), kind: 'openai', authKey: keyOf(p.id) });
+}
 
 // Gemini 구조화 출력 스키마 — 응답 형식을 강제해 JSON 파싱 실패를 막는다.
 // (판단근거의 "이해하셨죠?" 같은 인용부호가 이스케이프되지 않아 간헐적으로 깨지던 문제)
@@ -82,7 +90,7 @@ async function callLLM(provider, doc, hint) {
   if (ep.kind === 'ollama') {
     body = { model: ep.model, messages: [{ role: 'user', content: prompt }], stream: false, format: 'json' };
   } else if (ep.kind === 'gemini') {
-    if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY 미설정');
+    if (!ep.authKey) throw new Error('gemini API 키 미설정 — 설정에서 키를 입력하세요');
     body = {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
@@ -92,22 +100,31 @@ async function callLLM(provider, doc, hint) {
       },
     };
   } else if (ep.kind === 'claude') {
-    if (!process.env.CLAUDE_API_KEY) throw new Error('CLAUDE_API_KEY 미설정');
-    headers['x-api-key'] = process.env.CLAUDE_API_KEY;
+    if (!ep.authKey) throw new Error('claude API 키 미설정 — 설정에서 키를 입력하세요');
+    headers['x-api-key'] = ep.authKey;
     headers['anthropic-version'] = '2023-06-01';
     body = { model: ep.model, max_tokens: 4096, messages: [{ role: 'user', content: prompt }] };
+  } else if (ep.kind === 'openai') {
+    // OpenAI 호환 (openai · grok · mistral …) — Bearer 인증, chat/completions
+    if (!ep.authKey) throw new Error(`${provider} API 키 미설정 — 설정에서 키를 입력하세요`);
+    headers['Authorization'] = `Bearer ${ep.authKey}`;
+    body = { model: ep.model, temperature: 0.2, messages: [{ role: 'user', content: prompt }] };
   }
   const res = await fetch(ep.url, { method: 'POST', headers, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`${provider} HTTP ${res.status}`);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`${provider} HTTP ${res.status}${detail ? ' — ' + detail.slice(0, 200) : ''}`);
+  }
   const data = await res.json();
   // 잘린 응답은 "파싱 실패"로만 보이면 원인을 알 수 없다 — 따로 구분한다.
-  const finish = data.candidates?.[0]?.finishReason;
-  if (ep.kind === 'gemini' && finish && finish !== 'STOP') {
-    throw new Error(`gemini 응답 중단(${finish}) — 내규를 나눠서 올리세요`);
-  }
+  const gfin = data.candidates?.[0]?.finishReason;
+  if (ep.kind === 'gemini' && gfin && gfin !== 'STOP') throw new Error(`gemini 응답 중단(${gfin}) — 내규를 나눠서 올리세요`);
+  const ofin = data.choices?.[0]?.finish_reason;
+  if (ep.kind === 'openai' && ofin === 'length') throw new Error(`${provider} 응답이 잘렸습니다(length) — 내규를 나눠서 올리세요`);
   const text =
     ep.kind === 'ollama' ? data.message?.content :
     ep.kind === 'gemini' ? data.candidates?.[0]?.content?.parts?.[0]?.text :
+    ep.kind === 'openai' ? data.choices?.[0]?.message?.content :
     data.content?.[0]?.text;
   return text || '';
 }

@@ -10,27 +10,34 @@ import Laws from './pages/Laws.jsx';
 import GraphView from './pages/GraphView.jsx';
 import RulesetTags from './pages/RulesetTags.jsx';
 import RulesetManager from './pages/RulesetManager.jsx';
+import Login from './pages/Login.jsx';
+import Users from './pages/Users.jsx';
 import { Icon } from './lib/icons.jsx';
+import { useAuth } from './lib/auth.jsx';
 
 const ICON = { finance: '🏦', securities: '📈', auto: '🚗', insurance: '🛡' };
-// provider 접두사가 모델명에 중복되면 뗀다 (gemini + gemini-flash-latest → flash-latest)
-function prettyModel(provider, model) {
-  if (!model) return '';
-  return model.replace(new RegExp('^' + provider + '[-_]', 'i'), '');
-}
-const TITLES = { '/': '룰 편집', '/rulesets': '룰셋 관리', '/laws': '법령 관리', '/api': 'RS API', '/settings': '설정' };
+const ROLE_LBL = { master: '마스터', approver: '편집·승인', viewer: '보기 전용' };
+const TITLES = { '/': '룰 편집', '/rulesets': '룰셋 관리', '/laws': '법령 관리', '/api': 'RS API', '/settings': '설정', '/users': '사용자 관리' };
 // 헤더 제목 앞 아이콘 — LNB 라인 아이콘 세트와 같은 이름을 쓴다
-const HEAD_IC = { '/': 'rule', '/rulesets': 'rulesets', '/laws': 'law', '/api': 'api' };
+const HEAD_IC = { '/': 'rule', '/rulesets': 'rulesets', '/laws': 'law', '/api': 'api', '/settings': 'gear', '/users': 'users' };
 const SUBS = {
   '/rulesets': '모든 룰셋을 한눈에 — 이름 변경·상태·룰 수 확인',
-  '/laws': '조문을 수집하고 개정을 검토·승인합니다',
+  '/laws': '조문을 수집하고 개정을 자동 반영합니다',
   '/api': '엔드포인트를 호출해 요청·응답을 확인합니다',
   '/settings': '분석 엔진과 배포 환경을 설정합니다',
+  '/users': '계정과 권한을 관리합니다 (마스터 전용)',
 };
-// 데이터가 사내에 머무는 provider — 폐쇄망 정책(F1-6) 판별용
-const ONPREM = ['ruleBased', 'local'];
 
+// 로그인 게이트 — 미인증이면 로그인, 인증되면 앱 셸.
 export default function App() {
+  const { user, loading } = useAuth();
+  if (loading) return <div className="app-boot">불러오는 중…</div>;
+  if (!user) return <Login />;
+  return <AppShell />;
+}
+
+function AppShell() {
+  const { user, logout, canWrite, isMaster } = useAuth();
   const [status, setStatus] = useState(null);
   const [rows, setRows] = useState(null);
   const [mode, setMode] = useState(null);   // create | select
@@ -76,6 +83,9 @@ export default function App() {
   // 사이드바·상단바가 이 구분을 함께 반영하도록 앱 전역에 둔다.
   const [createTarget, setCreateTarget] = useState(null);
   useEffect(() => { if (mode !== 'create') setCreateTarget(null); }, [mode]);
+  // 생성 모드는 워크스페이스(/)에서만 유효하다. 헤더 종(→/laws) 등으로 다른 화면에 가면
+  // 사이드바가 생성 모드에 남는 버그가 있어, 경로가 / 를 벗어나면 선택 모드로 되돌린다.
+  useEffect(() => { if (mode === 'create' && loc.pathname !== '/') setMode('select'); }, [loc.pathname, mode]);
   const addTarget = createTarget != null ? rows?.find((r) => r.id === createTarget) : null;
 
   const toCreate = () => { setCreateTarget(null); setMode('create'); nav('/'); };
@@ -83,6 +93,14 @@ export default function App() {
     if (id != null) setSelId(id);
     else if (!selId && rows?.length) setSelId(rows[0].id);
     setMode('select'); nav('/');
+  };
+
+  // LNB 드롭다운에서 룰셋을 바꾸면: selId 갱신 + 태그/온톨로지처럼 URL이 특정 룰셋에 묶인
+  // 화면은 새 룰셋의 같은 화면으로 이동해 다시 불러온다. 룰 편집(/)은 selId 변화만으로 자동 갱신.
+  const changeSel = (id) => {
+    setSelId(id);
+    const m = loc.pathname.match(/^\/rulesets\/\d+\/(tags|graph)$/);
+    if (m) nav(`/rulesets/${id}/${m[1]}`);
   };
 
   const ctx = useMemo(() => ({ rows, loadRows, mode, setMode, selId, setSelId, sel, createTarget, setCreateTarget, toCreate, toSelect }),
@@ -102,7 +120,6 @@ export default function App() {
         : tags ? '표준태그사전 기준으로 룰셋의 의미태그·행위태그를 관리합니다'
           : detail ? '룰을 편집하고 승인한 뒤 게시합니다' : '');
   const c = status?.counts;
-  const onprem = status && ONPREM.includes(status.provider);
 
   return (
     <WsContext.Provider value={ctx}>
@@ -138,7 +155,7 @@ export default function App() {
               <>
                 <div className="rscard">
                   <span className="rscard-lbl">선택한 룰셋</span>
-                  <RulesetSelect rows={rows} selId={selId} onSelect={setSelId} />
+                  <RulesetSelect rows={rows} selId={selId} onSelect={changeSel} />
                 </div>
                 {/* 룰셋 스코프 — 선택된 룰셋을 대상으로 동작한다 */}
                 <NavLink to="/" end data-tip="룰 편집" className={({ isActive }) => (isActive ? 'on ' : '') + 'tip-r'}>
@@ -160,27 +177,30 @@ export default function App() {
                 <NavLink to="/rulesets" end data-tip="룰셋 관리" className={({ isActive }) => (isActive ? 'on ' : '') + 'tip-r'}>
                   <span className="ic"><Icon name="rulesets" /></span>룰셋 관리
                 </NavLink>
-                <NavLink to="/api" data-tip="RS API" className={({ isActive }) => (isActive ? 'on ' : '') + 'tip-r'}>
-                  <span className="ic"><Icon name="api" /></span>RS API
-                </NavLink>
                 <NavLink to="/laws" data-tip="법령 관리" className={({ isActive }) => (isActive ? 'on ' : '') + 'tip-r'}>
                   <span className="ic"><Icon name="law" /></span>법령 관리
                 </NavLink>
+                <NavLink to="/api" data-tip="RS API" className={({ isActive }) => (isActive ? 'on ' : '') + 'tip-r'}>
+                  <span className="ic"><Icon name="api" /></span>RS API
+                </NavLink>
+                <NavLink to="/settings" data-tip="설정" className={({ isActive }) => (isActive ? 'on ' : '') + 'tip-r'}>
+                  <span className="ic"><Icon name="gear" /></span>설정
+                </NavLink>
+                {isMaster && (
+                  <NavLink to="/users" data-tip="사용자 관리" className={({ isActive }) => (isActive ? 'on ' : '') + 'tip-r'}>
+                    <span className="ic"><Icon name="users" /></span>사용자 관리
+                  </NavLink>
+                )}
               </>
             )}
           </nav>
 
-          {/* provider 표시는 LNB 하단에 고정 (헤더에서 옮김).
-              라벨엔 '클라우드' 문구 대신 실제 모델(버전)을 적는다. 온프레미스/클라우드
-              구분은 색(safe/cloud)과 툴팁으로만 남긴다. */}
-          {status && (
-            <div className="side-prov">
-              <span className={'provider-pill tip-r ' + (onprem ? 'safe' : 'cloud')}>
-                <i />{status.provider}
-                {status.model && <em>{prettyModel(status.provider, status.model)}</em>}
-              </span>
-            </div>
-          )}
+          {/* 하단 — 현재 사용자 + 로그아웃 */}
+          <div className="side-user">
+            <span className="su-av">{(user.name || user.username || '?').slice(0, 1)}</span>
+            <div className="su-txt"><b>{user.name || user.username}</b><span>{ROLE_LBL[user.role] || user.role}</span></div>
+            <button className="su-out tip-t" data-tip="로그아웃" onClick={logout} aria-label="로그아웃">⏻</button>
+          </div>
         </aside>
 
         <div className="main">
@@ -194,15 +214,17 @@ export default function App() {
             </div>
 
             <div className="tb-right">
-              {/* 통계(게시/룰/법령) 자리에 룰 생성 버튼을 둔다 */}
-              <button className="tb-create tip-b" data-tip="새 룰셋 생성" onClick={toCreate}>
-                <span className="spark"><Icon name="wand" size={15} /></span>룰셋 생성
-              </button>
+              {/* 룰셋 생성은 편집 권한(master·approver)만 — viewer는 숨긴다 */}
+              {canWrite && (
+                <button className="tb-create tip-b" data-tip="새 룰셋 생성" onClick={toCreate}>
+                  <span className="spark"><Icon name="wand" size={15} /></span>룰셋 생성
+                </button>
+              )}
               {c && (
-                <NavLink to="/laws" className={'tb-bell tip-b' + (c.pending_updates > 0 ? ' has' : '')}
-                  data-tip={c.pending_updates > 0 ? `승인 대기 ${c.pending_updates}건` : '승인 대기 없음'}>
+                <NavLink to="/laws" className={'tb-bell tip-b' + (c.recent_amendments > 0 ? ' has' : '')}
+                  data-tip={c.recent_amendments > 0 ? `최근 7일 개정 반영 ${c.recent_amendments}건` : '최근 개정 반영 없음'}>
                   🔔
-                  {c.pending_updates > 0 && <span className="n">{c.pending_updates}</span>}
+                  {c.recent_amendments > 0 && <span className="n">{c.recent_amendments}</span>}
                 </NavLink>
               )}
               <button className="tb-theme tip-b" onClick={toggleTheme}
@@ -222,6 +244,7 @@ export default function App() {
               <Route path="/updates" element={<Navigate to="/laws" replace />} />
               <Route path="/api" element={<ApiExplorer />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/users" element={isMaster ? <Users /> : <Navigate to="/" replace />} />
               {/* 구 경로 → 워크스페이스로 흡수 */}
               <Route path="/rulesets" element={<RulesetManager />} />
               <Route path="/extract" element={<Navigate to="/" replace />} />

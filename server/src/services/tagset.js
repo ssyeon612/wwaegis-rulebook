@@ -7,7 +7,7 @@ const parse = (s) => { if (!s) return []; try { const a = JSON.parse(s); return 
 
 const countRows = db.prepare('SELECT COUNT(*) c FROM ruleset_tags WHERE ruleset_id=?');
 const insTag = db.prepare(
-  'INSERT OR IGNORE INTO ruleset_tags (ruleset_id,kind,code,name,grp,output,origin) VALUES (?,?,?,?,?,?,?)'
+  'INSERT OR IGNORE INTO ruleset_tags (ruleset_id,kind,code,name,grp,origin) VALUES (?,?,?,?,?,?)'
 );
 
 // 룰셋 사전이 비어 있으면 표준 + 사용중 비표준 코드로 시드
@@ -15,13 +15,13 @@ export function seedTagset(rulesetId) {
   if (countRows.get(rulesetId).c > 0) return false;
   const rules = db.prepare('SELECT tag, action_tags FROM rules WHERE ruleset_id=?').all(rulesetId);
   db.transaction(() => {
-    for (const m of STD_MEANING) insTag.run(rulesetId, 'meaning', m.code, m.name, m.grp, m.output, 'standard');
-    for (const a of STD_ACTION) insTag.run(rulesetId, 'action', a.code, a.name, null, 1, 'standard');
+    for (const m of STD_MEANING) insTag.run(rulesetId, 'meaning', m.code, m.name, m.grp, 'standard');
+    for (const a of STD_ACTION) insTag.run(rulesetId, 'action', a.code, a.name, null, 'standard');
     const stdM = new Set(STD_MEANING.map((x) => x.code)), stdA = new Set(STD_ACTION.map((x) => x.code));
     const usedM = new Set(), usedA = new Set();
     for (const r of rules) { if (r.tag) usedM.add(r.tag); for (const a of parse(r.action_tags)) usedA.add(a); }
-    for (const c of usedM) if (!stdM.has(c)) insTag.run(rulesetId, 'meaning', c, null, null, 1, 'custom');
-    for (const c of usedA) if (!stdA.has(c)) insTag.run(rulesetId, 'action', c, null, null, 1, 'custom');
+    for (const c of usedM) if (!stdM.has(c)) insTag.run(rulesetId, 'meaning', c, null, null, 'custom');
+    for (const c of usedA) if (!stdA.has(c)) insTag.run(rulesetId, 'action', c, null, null, 'custom');
   })();
   return true;
 }
@@ -52,19 +52,19 @@ export function getTagset(rulesetId) {
   return { meaning, action, orphans };
 }
 
-export function addTag(rulesetId, { kind, code, name, grp, output }) {
+export function addTag(rulesetId, { kind, code, name, grp }) {
   if (!['meaning', 'action'].includes(kind)) throw new Error('kind 오류');
   seedTagset(rulesetId);
   code = String(code || '').trim().toUpperCase();
   if (!code) throw new Error('code 필요');
-  insTag.run(rulesetId, kind, code, name || null, grp || null, output === 0 ? 0 : 1, 'custom');
+  insTag.run(rulesetId, kind, code, name || null, grp || null, 'custom');
   return getTagset(rulesetId);
 }
 
 export function updateTag(rulesetId, tagId, body) {
   const t = db.prepare('SELECT * FROM ruleset_tags WHERE id=? AND ruleset_id=?').get(tagId, rulesetId);
   if (!t) throw new Error('not_found');
-  const fields = ['name', 'active', 'output', 'grp'];
+  const fields = ['name', 'active', 'grp'];
   const set = fields.filter((f) => f in body);
   if (set.length)
     db.prepare(`UPDATE ruleset_tags SET ${set.map((f) => `${f}=?`).join(',')} WHERE id=?`).run(...set.map((f) => body[f]), tagId);

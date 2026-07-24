@@ -55,6 +55,10 @@ router.post('/loadRuleSet', (req, res) => {
   const rs = db.prepare("SELECT * FROM rulesets WHERE ruleset_id=? AND status='published'").get(rid);
   if (!rs) return res.json({ responded_at: now(), module_id: moduleId, result: 'FAILURE', error_category: 'NOT_FOUND', error_message: 'ruleset_id 없음' });
   const rules = db.prepare("SELECT * FROM rules WHERE ruleset_id=? AND status='approved' ORDER BY order_idx").all(rs.id);
+  // 태그 사전에서 '미사용'(active=0)으로 표시된 의미태그는 서빙 계약에서 제외한다.
+  const inactive = new Set(
+    db.prepare("SELECT code FROM ruleset_tags WHERE ruleset_id=? AND kind='meaning' AND active=0").all(rs.id).map((t) => t.code)
+  );
   res.json({
     responded_at: now(), module_id: moduleId, result: 'SUCCESS',
     ruleset: {
@@ -62,7 +66,7 @@ router.post('/loadRuleSet', (req, res) => {
       rules: rules.map((r) => {
         // knowledge 본문에 섞인 [추가 의미태그] 를 required_meaning_tags 로 옮긴다 (본문에는 남기지 않는다)
         const { tags: extra } = splitMeaningTags(r.knowledge);
-        const meaningTags = [...new Set([...(r.tag ? [r.tag] : []), ...extra])];
+        const meaningTags = [...new Set([...(r.tag ? [r.tag] : []), ...extra])].filter((t) => !inactive.has(t));
         return {
           rule_id: r.rule_uid,
           rule_version: '0.1.0',

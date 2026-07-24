@@ -7,32 +7,30 @@
 // 모든 provider는 analyze(doc, ctx) → { domain, rules[], log, unmatched, engine } 를 반환.
 import { ruleBasedAnalyze } from './ruleBased.js';
 import { llmAnalyze } from './remote.js';
+import { getSetting } from '../services/settings.js';
+import { modelOf, byId } from './providers.js';
 
-const PROVIDER = process.env.LLM_PROVIDER || 'ruleBased';
-
+// provider는 설정(app_settings) → .env → 기본값 순. 설정에서 바꾸면 재시작 없이 반영된다.
 export function activeProvider() {
-  return PROVIDER;
+  return getSetting('llm_provider') || process.env.LLM_PROVIDER || 'ruleBased';
 }
 
-// 현재 provider가 실제로 쓰는 모델(버전) 문자열. ruleBased는 오프라인이라 없음(null).
+// 현재 provider의 모델(버전). ruleBased(폴백 전용)는 모델이 없음(null).
 export function activeModel() {
-  switch (PROVIDER) {
-    case 'gemini': return process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-    case 'claude': return process.env.CLAUDE_MODEL || 'claude-sonnet-5';
-    case 'local': return process.env.LOCAL_LLM_MODEL || 'gemma2';
-    default: return null;
-  }
+  const p = activeProvider();
+  return byId[p] ? modelOf(p) : null;
 }
 
 export async function analyzeDocument(doc, productName, hint) {
+  const provider = activeProvider();
   // hint(담당자 보충 설명)는 LLM만 활용한다. 규칙기반은 키워드 매칭이라 반영할 지점이 없다.
-  if (PROVIDER === 'ruleBased') return ruleBasedAnalyze(doc, productName);
+  if (provider === 'ruleBased') return ruleBasedAnalyze(doc, productName);
   try {
-    return await llmAnalyze(PROVIDER, doc, productName, hint);
+    return await llmAnalyze(provider, doc, productName, hint);
   } catch (err) {
     // 폐쇄망/키 미설정 등으로 실패 시 규칙기반으로 폴백 (서비스 중단 방지)
     const res = ruleBasedAnalyze(doc, productName);
-    res.engine = `${PROVIDER} 실패 → ruleBased 폴백 (${err.message})`;
+    res.engine = `${provider} 실패 → ruleBased 폴백 (${err.message})`;
     return res;
   }
 }

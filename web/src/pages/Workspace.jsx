@@ -2,8 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { useWs } from '../lib/ws.js';
+import { useAuth } from '../lib/auth.jsx';
 
 const ICON = { finance: '🏦', securities: '📈', auto: '🚗', insurance: '🛡' };
+// 업로드 허용 확장자 — 화면 표시(칩)와 input accept 를 한 곳에서 관리한다.
+const ACCEPT_EXTS = ['xlsx', 'xls', 'csv', 'pdf', 'txt', 'md'];
+const ACCEPT_ATTR = ACCEPT_EXTS.map((e) => '.' + e).join(',');
 
 // knowledge 본문 끝의 [추가 의미태그] 라인을 분리한다 (서버 splitMeaningTags 와 동일 규칙).
 // 판단근거 칸에는 본문(body)만 보이고, 추가 의미태그는 의미태그 칩으로 옮겨 보여준다.
@@ -64,7 +68,8 @@ export default function Workspace() {
   if (!detail) return <div className="muted">로딩 중…</div>;
   // 사이드바의 ＋생성은 대상 없이 새로 만들고, 여기 ＋내규 추가는 현재 룰셋을 대상으로 잡는다.
   return (
-    <RuleWorkbench rs={detail} onChange={reloadDetail}
+    // key={detail.id} — 룰셋을 바꾸면 필터·페이지·열린 편집행 등 내부 상태를 깨끗이 초기화한다
+    <RuleWorkbench key={detail.id} rs={detail} onChange={reloadDetail}
       onAdd={() => { setCreateTarget(selId); setMode('create'); }} />
   );
 }
@@ -72,8 +77,7 @@ export default function Workspace() {
 /* ───────── 생성 패널 ───────── */
 function CreatePanel({ target, targetName, onDone }) {
   const [src, setSrc] = useState('file');   // file | text
-  const [file, setFile] = useState(null);
-  const [fname, setFname] = useState('');
+  const [files, setFiles] = useState([]);   // 다중 파일 업로드
   const [text, setText] = useState('');
   const [docName, setDocName] = useState('');
   const [prodName, setProdName] = useState('');   // STT 목록 표시 상품명 = 문서명
@@ -83,20 +87,41 @@ function CreatePanel({ target, targetName, onDone }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');   // 법령 자동 수집 결과 안내
-  const pick = (f) => {
-    if (!f) return;
-    setFile(f); setFname(f.name); setErr('');
-    // 문서명을 아직 직접 수정하지 않았으면 파일명(확장자 제외)으로 기본 바인딩
-    if (!prodTouched) setProdName(f.name.replace(/\.[^.]+$/, ''));
-  };
 
-  const ready = src === 'file' ? !!file : !!text.trim();
+  // 파일 추가(같은 이름·크기는 중복 제외).
+  const addFiles = (list) => {
+    const incoming = [...(list || [])].filter(Boolean);
+    if (!incoming.length) return;
+    setErr('');
+    setFiles((prev) => {
+      const key = (f) => `${f.name}:${f.size}`;
+      const seen = new Set(prev.map(key));
+      return [...prev, ...incoming.filter((f) => !seen.has(key(f)))];
+    });
+  };
+  const removeFile = (i) => setFiles((prev) => prev.filter((_, k) => k !== i));
+
+  // 문서명 자동 바인딩 — 파일 1개면 그 파일명(확장자 제외), 여러 개면 빈칸. 직접 수정하면 유지.
+  useEffect(() => {
+    if (prodTouched) return;
+    setProdName(files.length === 1 ? files[0].name.replace(/\.[^.]+$/, '') : '');
+  }, [files, prodTouched]);
+
+  const ready = src === 'file' ? files.length > 0 : !!text.trim();
+
+  // 생성 중에는 새로고침/창 닫기를 경고한다 (다른 화면 이동은 오버레이가 막는다).
+  useEffect(() => {
+    if (!busy) return undefined;
+    const warn = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [busy]);
 
   async function run() {
     setBusy(true); setErr('');
     try {
       const form = new FormData();
-      if (src === 'file') form.append('file', file);
+      if (src === 'file') files.forEach((f) => form.append('files', f));   // 모든 파일 전송
       else {
         form.append('text', text);
         if (docName.trim()) form.append('name', docName.trim());
@@ -107,7 +132,7 @@ function CreatePanel({ target, targetName, onDone }) {
       if (target) form.append('target_ruleset_id', String(target));
       const res = await api.extract(form);
       if (res.error) { setErr(res.message || res.error); setBusy(false); return; }
-      // 법령 자동 수집 결과가 있으면 잠깐 안내 후 이동 (없으면 즉시 이동)
+      // 법령 자동 수집 결과가 있으면 잠깐 안내 후 이동 (없으면 즉시 이동). 이동까지 오버레이 유지.
       const lc = res.law_collect;
       if (lc?.collected?.length) {
         const arts = lc.collected.reduce((s, c) => s + (c.added || 0), 0);
@@ -116,89 +141,112 @@ function CreatePanel({ target, targetName, onDone }) {
         return;
       }
       onDone(res.ruleset_id);
-    } catch (e) { setErr(String(e)); }
-    setBusy(false);
+    } catch (e) { setErr(String(e)); setBusy(false); }
   }
 
   return (
-    // 추가 모드는 강조 테두리로 새 룰셋 생성과 구분한다 (위 배너와 색을 맞춤)
+    <>
+    {/* 생성 중 — 전체 화면을 덮어 다른 화면 이동을 막는다 */}
+    {busy && (
+      <div className="creating-overlay">
+        <div className="creating-box">
+          <div className="spinner" />
+          <b>룰셋 생성 중…</b>
+          <span>{target ? '업로드한 문서를 분석해 이 룰셋에 추가하고 있습니다.' : 'AI가 업로드한 문서를 분석해 룰셋을 만들고 있습니다.'} 완료될 때까지 다른 작업을 할 수 없습니다.</span>
+        </div>
+      </div>
+    )}
+    {/* 추가 모드는 강조 테두리로 새 룰셋 생성과 구분한다 (위 배너와 색을 맞춤) */}
     <div className={'card' + (target ? ' cp-add' : '')}>
       <div className="card-h">
         <div>
           <h2>{target ? `📎 내규 업로드 → ${targetName}` : '새 룰셋 생성'}</h2>
           <div className="sub">{target
-            ? '아래에서 내규를 올리면 룰을 뽑아 이 룰셋에 더합니다.'
-            : '내규를 올리면 도메인을 자동 판별하고, 인용한 법령을 국가법령정보센터에서 검색·수집해 붙여 룰셋을 만듭니다.'}</div>
+            ? '내규·약관·사내 법령을 여러 개 올리면 모두 분석해 룰을 뽑아 이 룰셋에 더합니다.'
+            : '내규·약관·사내 법령을 여러 개 올리면 전부 분석해 도메인을 판별하고, 인용한 법령을 국가법령정보센터에서 검색·수집해 붙여 룰셋을 만듭니다.'}</div>
         </div>
       </div>
-      <div className="card-b">
-        <div className="cp-grid">
-          {/* 왼쪽 — 문서명 · AI 보충 설명 (메타데이터) */}
-          <div className="cp-meta">
-            {src === 'text' && (
-              <>
-                <label className="flabel">문서명 (선택)</label>
-                <input className="fld" value={docName} onChange={(e) => setDocName(e.target.value)}
-                  placeholder="예: 완전판매 체크리스트" style={{ marginBottom: 14 }} />
-              </>
-            )}
+      <div className="card-b cp-flow">
+        {/* 1) 소스 선택 */}
+        <div className="seg eq cp-tabs">
+          <button className={src === 'file' ? 'on' : ''} onClick={() => { setSrc('file'); setErr(''); }}>📄 파일 업로드</button>
+          <button className={src === 'text' ? 'on' : ''} onClick={() => { setSrc('text'); setErr(''); }}>✎ 직접 입력</button>
+        </div>
 
-            {!target && src === 'file' && (
-              <>
-                <label className="flabel">문서명 (선택)</label>
-                <input className="fld" value={prodName} onChange={(e) => { setProdName(e.target.value); setProdTouched(true); }}
-                  placeholder="예: 완전판매 체크리스트" style={{ marginBottom: 14 }} />
-              </>
+        {/* 2) 입력 — 파일 드롭(히어로) 또는 직접 입력 */}
+        {src === 'file' ? (
+          <div className={'cp-drop' + (drag ? ' drag' : '') + (files.length ? ' has' : '')}
+            onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
+            onDrop={(e) => { e.preventDefault(); setDrag(false); addFiles(e.dataTransfer.files); }}>
+            {files.length === 0 ? (
+              <div className="cp-drop-empty">
+                <div className="cp-drop-ic">⬆</div>
+                <div className="cp-drop-t">파일을 여기로 끌어다 놓으세요</div>
+                <div className="cp-drop-s">내규 · 약관 · 사내 법령 등 여러 개 업로드 가능</div>
+                <label className="fbtn">📄 파일 선택
+                  <input type="file" hidden multiple accept={ACCEPT_ATTR} onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+                </label>
+                <div className="cp-exts"><span>지원 형식</span>{ACCEPT_EXTS.map((x) => <em key={x}>{x.toUpperCase()}</em>)}</div>
+              </div>
+            ) : (
+              <div className="cp-files">
+                <div className="cp-files-h">
+                  <b>선택한 파일 {files.length}개</b>
+                  <label className="btn xs ghost">＋ 파일 추가
+                    <input type="file" hidden multiple accept={ACCEPT_ATTR} onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+                  </label>
+                </div>
+                {files.map((f, i) => (
+                  <div className="fileitem" key={f.name + f.size}>
+                    <span className="fn" title={f.name}>📄 {f.name}</span>
+                    <span className="fsz">{(f.size / 1024).toFixed(0)}KB</span>
+                    <button className="x" onClick={() => removeFile(i)} title="제거" aria-label="파일 제거">×</button>
+                  </div>
+                ))}
+                <div className="cp-exts"><span>지원 형식</span>{ACCEPT_EXTS.map((x) => <em key={x}>{x.toUpperCase()}</em>)}</div>
+              </div>
             )}
+          </div>
+        ) : (
+          <div>
+            <textarea className="fld cp-body" value={text} onChange={(e) => setText(e.target.value)}
+              placeholder={'제1조 상담 시작 시 고객을 일반금융소비자·전문투자자로 구분하여 확인한다.\n제2조 투자권유 전 투자자정보를 파악하여 투자성향을 산출한다.\n제3조 상품 권유 시 원금손실 가능성을 반드시 고지한다.'} />
+            <div className="cp-count">{text.trim() ? `${text.trim().split('\n').filter((l) => l.trim()).length}줄 · ${text.length}자` : ''}</div>
+          </div>
+        )}
 
-            <label className="flabel">AI 보충 설명 (선택)</label>
+        {/* 3) 메타 — 문서명 · AI 보충 설명 */}
+        <div className="cp-meta-grid">
+          {(src === 'text' || !target) && (
+            <div className="cp-field">
+              <label className="flabel">문서명
+                <span className="lblhint">{src === 'file'
+                  ? (files.length > 1 ? '· 여러 파일이라 직접 입력' : files.length === 1 ? '· 파일명 자동 (수정 가능)' : '(선택)')
+                  : '(선택)'}</span>
+              </label>
+              {src === 'file'
+                ? <input className="fld" value={prodName} onChange={(e) => { setProdName(e.target.value); setProdTouched(true); }}
+                    placeholder={files.length > 1 ? '여러 파일 묶음의 이름을 입력하세요' : '예: 완전판매 체크리스트'} />
+                : <input className="fld" value={docName} onChange={(e) => setDocName(e.target.value)} placeholder="예: 완전판매 체크리스트" />}
+            </div>
+          )}
+          <div className="cp-field">
+            <label className="flabel">AI 보충 설명 <span className="lblhint">(선택)</span></label>
             <textarea className="fld hint" value={hint} onChange={(e) => setHint(e.target.value)}
               placeholder={'예) 대면 판매만 함 · "핵심설명서"=상품설명서 · 고령자 만 65세 이상'} />
           </div>
-
-          {/* 오른쪽 — 내규 입력 + 실행 */}
-          <div className="cp-main">
-            <div className="seg eq" style={{ marginBottom: 12 }}>
-              <button className={src === 'file' ? 'on' : ''} onClick={() => { setSrc('file'); setErr(''); }}>📄 파일 업로드</button>
-              <button className={src === 'text' ? 'on' : ''} onClick={() => { setSrc('text'); setErr(''); }}>✎ 직접 입력</button>
-            </div>
-
-            {src === 'file' ? (
-              <div className={'drop' + (drag ? ' drag' : '')}
-                onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
-                onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files[0]); }}>
-                <label className="fbtn">📄 파일 선택
-                  <input type="file" hidden accept=".xlsx,.xls,.csv,.pdf,.txt,.md" onChange={(e) => pick(e.target.files[0])} />
-                </label>
-                <div className="fname">{fname ? `✓ ${fname}` : '엑셀·PDF·CSV·텍스트를 끌어다 놓거나 선택'}</div>
-              </div>
-            ) : (
-              <>
-                <textarea className="fld body" value={text} onChange={(e) => setText(e.target.value)}
-                  placeholder={'제1조 상담 시작 시 고객을 일반금융소비자·전문투자자로 구분하여 확인한다.\n제2조 투자권유 전 투자자정보를 파악하여 투자성향을 산출한다.\n제3조 상품 권유 시 원금손실 가능성을 반드시 고지한다.'} />
-                <div className="cp-count">
-                  {text.trim() ? `${text.trim().split('\n').filter((l) => l.trim()).length}줄 · ${text.length}자` : ''}
-                </div>
-              </>
-            )}
-
-            <div className="warn" style={{ fontSize: 11.5, margin: '14px 0' }}>
-              {src === 'text'
-                ? <><b>한 줄에 한 조항</b>씩 적어주세요. 줄 단위로 개념을 식별해 룰을 만듭니다.</>
-                : <>스캔 PDF는 텍스트를 뽑을 수 없습니다. 그럴 땐 <b>직접 입력</b>을 쓰세요.</>}
-            </div>
-
-            {err && <div className="warn" style={{ background: 'var(--fail-bg)', borderColor: 'var(--fail-line)', color: 'var(--fail)', marginBottom: 14 }}>⚠ {err}</div>}
-            {note && <div className="warn" style={{ background: 'var(--pass-bg)', borderColor: 'var(--pass-line)', color: 'var(--pass)', marginBottom: 14 }}>⚖ {note}</div>}
-
-            <button className="btn primary" disabled={busy || !ready} onClick={run}
-              style={{ width: '100%', justifyContent: 'center' }}>
-              {busy ? '분석 중…' : target ? '⚙ 분석 → 이 룰셋에 추가' : '⚙ AI 분석 → 룰셋 생성'}
-            </button>
-          </div>
         </div>
+
+        {err && <div className="warn" style={{ background: 'var(--fail-bg)', borderColor: 'var(--fail-line)', color: 'var(--fail)' }}>⚠ {err}</div>}
+        {note && <div className="warn" style={{ background: 'var(--pass-bg)', borderColor: 'var(--pass-line)', color: 'var(--pass)' }}>⚖ {note}</div>}
+
+        {/* 4) 실행 */}
+        <button className="btn primary cp-run" disabled={busy || !ready} onClick={run}>
+          {busy ? '분석 중…' : target ? '⚙ 분석 → 이 룰셋에 추가' : '⚙ AI 분석 → 룰셋 생성'}
+        </button>
       </div>
     </div>
+    </>
   );
 }
 
@@ -210,6 +258,7 @@ const FILTERS = [
 ];
 
 function RuleWorkbench({ rs, onChange, onAdd }) {
+  const { canWrite } = useAuth();
   const [open, setOpen] = useState(null);
   const [f, setF] = useState('all');
   const [q, setQ] = useState('');
@@ -269,9 +318,11 @@ function RuleWorkbench({ rs, onChange, onAdd }) {
           <div className="sub">승인 {approved} / {rs.rules.length} · 승인된 룰만 게시본에 포함됩니다</div>
         </div>
         <span className="spacer" />
-        <button className="btn sm" onClick={onAdd}>＋ 내규 추가</button>
-        <button className="btn sm" onClick={() => bulkAll()} disabled={approved === rs.rules.length}>전체 승인</button>
-        <button className="btn sm pass" onClick={publish}>{published ? '재게시 (버전↑)' : '게시'}</button>
+        {canWrite ? <>
+          <button className="btn sm" onClick={onAdd}>＋ 내규 추가</button>
+          <button className="btn sm" onClick={() => bulkAll()} disabled={approved === rs.rules.length}>전체 승인</button>
+          <button className="btn sm pass" onClick={publish}>{published ? '재게시 (버전↑)' : '게시'}</button>
+        </> : <span className="pill" style={{ background: 'var(--field)', color: 'var(--muted)' }}>👁 보기 전용</span>}
       </div>
 
       <ProposalsPanel rs={rs} onChange={onChange} />
@@ -296,7 +347,7 @@ function RuleWorkbench({ rs, onChange, onAdd }) {
         </span>
       </div>
 
-      {sel.size > 0 && (
+      {canWrite && sel.size > 0 && (
         <div className="rl-bulk">
           {sel.size}개 선택
           <span className="spacer" />
@@ -312,7 +363,7 @@ function RuleWorkbench({ rs, onChange, onAdd }) {
           ? <div className="card-b muted">{rs.rules.length === 0 ? '룰이 없습니다.' : '조건에 맞는 룰이 없습니다.'}</div>
           : <table className="tbl rows rl">
               <thead><tr>
-                <th className="ck"><input type="checkbox" checked={allChecked} onChange={toggleAll} /></th>
+                {canWrite && <th className="ck"><input type="checkbox" checked={allChecked} onChange={toggleAll} /></th>}
                 <th style={{ width: 40 }}>#</th>
                 <th>제목 · 내규 출처</th>
                 <th style={{ width: 84 }}>심각도</th>
@@ -321,7 +372,7 @@ function RuleWorkbench({ rs, onChange, onAdd }) {
               </tr></thead>
               <tbody>
                 {view.map((r, i) => (
-                  <RuleRow key={r.id} r={r} i={(cur - 1) * rpp + i} open={open === r.id}
+                  <RuleRow key={r.id} r={r} i={(cur - 1) * rpp + i} open={open === r.id} canWrite={canWrite}
                     checked={sel.has(r.id)}
                     onCheck={() => setSel((p) => { const n = new Set(p); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })}
                     onToggle={() => setOpen(open === r.id ? null : r.id)}
@@ -553,7 +604,7 @@ function ActionTags({ v, empty }) {
   );
 }
 
-function RuleRow({ r, i, open, checked, onCheck, onToggle, onPatch, onDel }) {
+function RuleRow({ r, i, open, checked, onCheck, onToggle, onPatch, onDel, canWrite }) {
   const [title, setTitle] = useState(r.title);
   // 판단근거 본문과 추가 의미태그를 분리 — textarea 에는 본문만, 태그는 칩으로.
   // 서버가 meaning_extra 로 태그를 내려주고, 저장 시 운반 라인도 서버가 보존한다.
@@ -570,7 +621,7 @@ function RuleRow({ r, i, open, checked, onCheck, onToggle, onPatch, onDel }) {
     <>
       {/* 행 전체를 클릭하면 상세가 열린다 — 편집 버튼은 없앴다. 체크박스·승인은 전파를 막는다. */}
       <tr className={'rl-row' + (open ? ' openrow' : '') + (checked ? ' on' : '')} onClick={onToggle}>
-        <td className="ck" onClick={stop}><input type="checkbox" checked={checked} onChange={onCheck} /></td>
+        {canWrite && <td className="ck" onClick={stop}><input type="checkbox" checked={checked} onChange={onCheck} /></td>}
         <td className="mono muted">{String(i + 1).padStart(2, '0')}</td>
         <td className="ttl">
           {r.title}
@@ -580,29 +631,29 @@ function RuleRow({ r, i, open, checked, onCheck, onToggle, onPatch, onDel }) {
         <td><span className={'badge ' + (r.status === 'approved' ? 'published' : 'draft')}><i />{r.status === 'approved' ? '승인' : '검토중'}</span></td>
         <td className="acts">
           <div className="rl-acts">
-            {r.status === 'approved'
+            {canWrite && (r.status === 'approved'
               ? <button className="btn sm ghost undo" title="검토중으로 되돌립니다"
                   onClick={(e) => { stop(e); onPatch({ status: 'draft' }); }}>승인 취소</button>
               : <button className="btn sm ok" title="승인하면 게시본에 포함됩니다"
-                  onClick={(e) => { stop(e); onPatch({ status: 'approved' }); }}>✓ 승인</button>}
+                  onClick={(e) => { stop(e); onPatch({ status: 'approved' }); }}>✓ 승인</button>)}
             <span className={'rl-caret' + (open ? ' on' : '')} aria-hidden="true">▸</span>
           </div>
         </td>
       </tr>
 
       {open && (
-        <tr className="editrow"><td colSpan="6">
+        <tr className="editrow"><td colSpan={canWrite ? 6 : 5}>
           <div className="rl-edit" onClick={stop}>
             {/* 상단: 정체성(제목·심각도·상태) + 삭제 */}
             <div className="rle-head">
               <div className="rle-f rle-title">
                 <label className="flabel">제목</label>
-                <input className="fld" value={title} onChange={(e) => setTitle(e.target.value)}
-                  onBlur={() => title !== r.title && onPatch({ title })} />
+                <input className="fld" value={title} readOnly={!canWrite} onChange={(e) => setTitle(e.target.value)}
+                  onBlur={() => canWrite && title !== r.title && onPatch({ title })} />
               </div>
               <div className="rle-f">
                 <label className="flabel">심각도</label>
-                <select className="fld" value={r.severity} onChange={(e) => onPatch({ severity: e.target.value })}>
+                <select className="fld" value={r.severity} disabled={!canWrite} onChange={(e) => onPatch({ severity: e.target.value })}>
                   {['HIGH', 'MEDIUM', 'LOW'].map((s) => <option key={s}>{s}</option>)}
                 </select>
               </div>
@@ -610,7 +661,7 @@ function RuleRow({ r, i, open, checked, onCheck, onToggle, onPatch, onDel }) {
                 <label className="flabel">상태</label>
                 <div className="rle-status"><span className={'badge ' + (r.status === 'approved' ? 'published' : 'draft')}><i />{r.status === 'approved' ? '승인' : '검토중'}</span></div>
               </div>
-              <button className="rle-del" onClick={onDel} title="이 룰 삭제">🗑 삭제</button>
+              {canWrite && <button className="rle-del" onClick={onDel} title="이 룰 삭제">🗑 삭제</button>}
             </div>
 
             {/* 본문: 좌 참조정보 · 우 판단근거(주 편집 대상) */}
@@ -644,8 +695,8 @@ function RuleRow({ r, i, open, checked, onCheck, onToggle, onPatch, onDel }) {
               <div className="rle-main">
                 <label className="flabel">판단근거 (knowledge) — 정의 · 근거 · 준수 · 위반 · 예시</label>
                 <textarea className="fld mono" style={{ fontSize: 12, lineHeight: 1.65 }}
-                  value={know} onChange={(e) => setKnow(e.target.value)}
-                  onBlur={saveKnow} />
+                  value={know} readOnly={!canWrite} onChange={(e) => setKnow(e.target.value)}
+                  onBlur={() => canWrite && saveKnow()} />
               </div>
             </div>
           </div>

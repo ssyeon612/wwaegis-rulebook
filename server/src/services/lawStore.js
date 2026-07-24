@@ -1,7 +1,8 @@
-// 법령 저장·변경감지 — API에서 받은 조문을 laws에 적재하고 개정을 승인 큐로 넘긴다.
+// 법령 저장·변경감지 — API에서 받은 조문을 laws에 적재하고 개정을 즉시 반영한다.
 //
-// 핵심 원칙: 개정이 감지돼도 laws를 즉시 덮어쓰지 않는다.
-// law_updates에 pending으로 쌓고, 사용자가 승인해야 본문이 교체된다. (요구사항 4)
+// 정책: 개정이 감지되면 승인 단계 없이 laws 본문을 바로 교체한다.
+// 각 개정은 law_updates(status='applied')에 as-is(old_content)/to-be(new_content)로 기록되어
+// 변경 이력 탭에서 확인할 수 있고, 참조 룰에는 rule_history 이력이 남는다.
 import db from '../db.js';
 
 const sel = db.prepare('SELECT * FROM laws WHERE law_key=? AND article_no=?');
@@ -14,13 +15,34 @@ const insVer = db.prepare(`
   INSERT INTO law_versions (law_id, content, effective_date, content_hash)
   VALUES (?,?,?,?)`);
 const touch = db.prepare("UPDATE laws SET fetched_at=datetime('now') WHERE id=?");
-const insUpd = db.prepare(`
-  INSERT INTO law_updates (law_id, old_hash, new_hash, old_content, new_content, affected_rules)
-  VALUES (@law_id,@old_hash,@new_hash,@old_content,@new_content,@affected_rules)`);
-const dupUpd = db.prepare(
-  "SELECT id FROM law_updates WHERE law_id=? AND new_hash=? AND status='pending'"
+const updLawContent = db.prepare(
+  "UPDATE laws SET content=?, content_hash=?, effective_date=?, fetched_at=datetime('now') WHERE id=?"
 );
+const insApplied = db.prepare(`
+  INSERT INTO law_updates (law_id, old_hash, new_hash, old_content, new_content, affected_rules, status, detected_at, reviewed_at, reviewed_by)
+  VALUES (@law_id,@old_hash,@new_hash,@old_content,@new_content,@affected_rules,'applied',datetime('now'),datetime('now'),'auto')`);
+const insRuleHist = db.prepare(`
+  INSERT INTO rule_history (rule_id, field, old_value, new_value, source, law_update_id, actor)
+  VALUES (?,?,?,?,'law_update',?,'auto')`);
+const affectedRuleIds = db.prepare('SELECT rule_id FROM rule_laws WHERE law_id=?');
 const countRules = db.prepare('SELECT COUNT(*) c FROM rule_laws WHERE law_id=?');
+
+// 개정 즉시 반영 — 본문 교체 · 스냅샷 · applied 기록(as-is/to-be) · 참조 룰 이력.
+// 트랜잭션 안에서 호출된다.
+function applyAmendment(cur, newContent, newHash, effectiveDate) {
+  const affected = countRules.get(cur.id).c;
+  updLawContent.run(newContent, newHash, effectiveDate ?? cur.effective_date, cur.id);
+  insVer.run(cur.id, newContent, effectiveDate ?? cur.effective_date, newHash);
+  const up = insApplied.run({
+    law_id: cur.id, old_hash: cur.content_hash, new_hash: newHash,
+    old_content: cur.content, new_content: newContent, affected_rules: affected,
+  });
+  for (const { rule_id } of affectedRuleIds.all(cur.id)) {
+    insRuleHist.run(rule_id, 'law_basis',
+      `${cur.law_name} ${cur.article_no} (개정 전)`,
+      `${cur.law_name} ${cur.article_no} (개정 반영)`, up.lastInsertRowid);
+  }
+}
 
 // meta/articles는 lawApi.fetchLawArticles() 결과를 그대로 받는다.
 export function syncLaw(meta, articles) {
@@ -52,17 +74,8 @@ export function syncLaw(meta, articles) {
         result.unchanged++;
         continue;
       }
-      // 개정 감지 — 같은 내용의 pending이 이미 있으면 중복 생성하지 않는다.
-      if (!dupUpd.get(cur.id, a.content_hash)) {
-        insUpd.run({
-          law_id: cur.id,
-          old_hash: cur.content_hash,
-          new_hash: a.content_hash,
-          old_content: cur.content,
-          new_content: a.content,
-          affected_rules: countRules.get(cur.id).c,
-        });
-      }
+      // 개정 감지 → 즉시 반영 (승인 단계 없음)
+      applyAmendment(cur, a.content, a.content_hash, a.effective_date);
       result.changed++;
       result.details.push({ article_no: a.article_no, title: a.article_title });
     }
@@ -71,41 +84,27 @@ export function syncLaw(meta, articles) {
   return result;
 }
 
-// 승인 — 이때 비로소 본문이 교체되고, 스냅샷과 이력이 남는다.
-export function approveUpdate(id, actor = 'admin') {
-  const u = db.prepare("SELECT * FROM law_updates WHERE id=? AND status='pending'").get(id);
-  if (!u) throw new Error('대기 중인 갱신 건이 아닙니다');
-  const law = db.prepare('SELECT * FROM laws WHERE id=?').get(u.law_id);
-
+// 기존에 승인 대기(pending)로 쌓여 있던 개정을 일괄 즉시 반영한다(정책 전환 마이그레이션).
+// 서버 기동 시 한 번 호출 — 이미 반영된 건이 없으면 no-op.
+export function applyPendingAmendments() {
+  const pend = db.prepare("SELECT * FROM law_updates WHERE status='pending'").all();
+  if (!pend.length) return 0;
   const tx = db.transaction(() => {
-    db.prepare(
-      "UPDATE laws SET content=?, content_hash=?, fetched_at=datetime('now') WHERE id=?"
-    ).run(u.new_content, u.new_hash, u.law_id);
-    insVer.run(u.law_id, u.new_content, law.effective_date, u.new_hash);
-    db.prepare(
-      "UPDATE law_updates SET status='approved', reviewed_at=datetime('now'), reviewed_by=? WHERE id=?"
-    ).run(actor, id);
-
-    // 이 조문을 참조하는 룰에 이력을 남긴다 — 룰 본문은 사람이 판단해 고치도록 둔다.
-    const affected = db.prepare('SELECT rule_id FROM rule_laws WHERE law_id=?').all(u.law_id);
-    const insHist = db.prepare(`
-      INSERT INTO rule_history (rule_id, field, old_value, new_value, source, law_update_id, actor)
-      VALUES (?,?,?,?,'law_update',?,?)`);
-    for (const { rule_id } of affected) {
-      insHist.run(rule_id, 'law_basis', `${law.law_name} ${law.article_no} (개정 전)`,
-        `${law.law_name} ${law.article_no} (개정 반영)`, id, actor);
+    for (const u of pend) {
+      const law = db.prepare('SELECT * FROM laws WHERE id=?').get(u.law_id);
+      if (law) {
+        updLawContent.run(u.new_content, u.new_hash, law.effective_date, u.law_id);
+        insVer.run(u.law_id, u.new_content, law.effective_date, u.new_hash);
+        for (const { rule_id } of affectedRuleIds.all(u.law_id))
+          insRuleHist.run(rule_id, 'law_basis',
+            `${law.law_name} ${law.article_no} (개정 전)`,
+            `${law.law_name} ${law.article_no} (개정 반영)`, u.id);
+      }
+      db.prepare("UPDATE law_updates SET status='applied', reviewed_at=datetime('now'), reviewed_by='auto' WHERE id=?").run(u.id);
     }
   });
   tx();
-  return { ok: true, law: `${law.law_name} ${law.article_no}` };
-}
-
-export function rejectUpdate(id, actor = 'admin', note = '') {
-  const r = db.prepare(
-    "UPDATE law_updates SET status='rejected', reviewed_at=datetime('now'), reviewed_by=?, note=? WHERE id=? AND status='pending'"
-  ).run(actor, note, id);
-  if (!r.changes) throw new Error('대기 중인 갱신 건이 아닙니다');
-  return { ok: true };
+  return pend.length;
 }
 
 export function listLaws() {
@@ -129,9 +128,10 @@ export function listArticles(lawKey) {
     FROM laws l WHERE l.law_key=? ORDER BY l.id`).all(lawKey);
 }
 
-// 법령 변경 이력 타임라인 — 수집·개정반영·감지·반려를 한 줄기로 합친다.
+// 법령 변경 이력 타임라인 — 수집 + 개정 반영(즉시)을 한 줄기로 합친다.
 // 최초 수집은 한 법령당 조문 수만큼(수십~수백 건) 스냅샷이 동시에 생기므로
-// 분 단위로 묶어 "n개 조문 수집" 한 건으로 보여준다. 개정은 조문 단위가 의미 있어 개별로 둔다.
+// 분 단위로 묶어 "n개 조문 수집" 한 건으로 보여준다.
+// 개정 반영은 조문 단위로 as-is(old_content)/to-be(new_content) 를 함께 실어 보낸다.
 export function lawHistory(limit = 200) {
   const collected = db.prepare(`
     SELECT l.law_key, l.law_name, substr(v.captured_at, 1, 16) at, COUNT(*) n
@@ -139,38 +139,18 @@ export function lawHistory(limit = 200) {
     WHERE v.id = (SELECT MIN(id) FROM law_versions WHERE law_id = v.law_id)
     GROUP BY l.law_key, l.law_name, substr(v.captured_at, 1, 16)`).all();
 
+  // 즉시 반영된 개정 — as-is/to-be 본문 포함. (과거 수동 'approved' 건도 함께 노출)
   const updated = db.prepare(`
-    SELECT l.law_key, l.law_name, l.article_no, l.article_title, l.id law_id,
-           v.captured_at at, v.id version_id,
-           (SELECT u.reviewed_by FROM law_updates u
-             WHERE u.law_id = v.law_id AND u.new_hash = v.content_hash AND u.status = 'approved'
-             ORDER BY u.id DESC LIMIT 1) actor,
-           (SELECT u.affected_rules FROM law_updates u
-             WHERE u.law_id = v.law_id AND u.new_hash = v.content_hash AND u.status = 'approved'
-             ORDER BY u.id DESC LIMIT 1) affected_rules
-    FROM law_versions v JOIN laws l ON l.id = v.law_id
-    WHERE v.id <> (SELECT MIN(id) FROM law_versions WHERE law_id = v.law_id)`).all();
-
-  // 승인된 건은 위 '개정 반영'으로 이미 잡히므로 여기선 대기·반려만
-  const queued = db.prepare(`
-    SELECT u.id update_id, u.status, u.affected_rules, u.note, u.reviewed_by actor,
+    SELECT u.id update_id, u.old_content, u.new_content, u.affected_rules, u.reviewed_by actor,
            COALESCE(u.reviewed_at, u.detected_at) at,
            l.law_key, l.law_name, l.article_no, l.article_title, l.id law_id
     FROM law_updates u JOIN laws l ON l.id = u.law_id
-    WHERE u.status IN ('pending', 'rejected')`).all();
+    WHERE u.status IN ('applied', 'approved')`).all();
 
   return [
     ...collected.map((r) => ({ kind: 'collected', ...r })),
     ...updated.map((r) => ({ kind: 'updated', ...r })),
-    ...queued.map((r) => ({ kind: r.status === 'pending' ? 'detected' : 'rejected', ...r })),
   ]
     .sort((a, b) => String(b.at).localeCompare(String(a.at)))
     .slice(0, limit);
-}
-
-export function listUpdates(status = 'pending') {
-  return db.prepare(`
-    SELECT u.*, l.law_name, l.article_no, l.article_title
-    FROM law_updates u JOIN laws l ON l.id=u.law_id
-    WHERE u.status=? ORDER BY u.detected_at DESC`).all(status);
 }

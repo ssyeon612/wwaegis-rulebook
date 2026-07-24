@@ -3,7 +3,7 @@ import express from 'express';
 import db from '../db.js';
 import { searchLaws, fetchLawArticles } from '../services/lawApi.js';
 import { mcpSearchLaws, mcpEnabled } from '../services/mcpLaw.js';
-import { syncLaw, approveUpdate, rejectUpdate, listLaws, listArticles, listUpdates, lawHistory } from '../services/lawStore.js';
+import { syncLaw, listLaws, listArticles, lawHistory } from '../services/lawStore.js';
 import { runCheckNow, schedulerInfo } from '../services/scheduler.js';
 import { relinkRuleset } from '../services/lawLink.js';
 
@@ -58,17 +58,7 @@ router.post('/scheduler/check-now', async (req, res) => {
 // 룰셋을 수집된 법령에 (재)연결
 router.post('/relink/:rulesetId', (req, res) => res.json(relinkRuleset(Number(req.params.rulesetId))));
 
-// 갱신 승인 큐
-router.get('/updates/list', (req, res) => res.json(listUpdates(req.query.status || 'pending')));
-router.get('/updates/count', (req, res) =>
-  res.json(db.prepare("SELECT COUNT(*) c FROM law_updates WHERE status='pending'").get()));
-router.post('/updates/:id/approve', (req, res) => {
-  try { res.json(approveUpdate(Number(req.params.id), req.body?.actor)); }
-  catch (err) { fail(res, err); }
-});
-router.post('/updates/:id/reject', (req, res) => {
-  try { res.json(rejectUpdate(Number(req.params.id), req.body?.actor, req.body?.note)); }
-  catch (err) { fail(res, err); }
-});
+// ※ 개정은 감지 즉시 자동 반영된다 — 승인 큐(승인/반려) 엔드포인트는 제거했다.
+//    반영 내역은 /history(변경 이력)에서 as-is/to-be 로 확인한다.
 
 export default router;

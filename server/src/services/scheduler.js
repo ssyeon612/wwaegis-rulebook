@@ -1,12 +1,15 @@
 // 법령 자동 점검 스케줄러 (요구사항 4)
 // 수집된 각 법령을 주기적으로 국가법령정보센터에서 다시 받아 개정을 감지한다.
-// 감지된 개정은 syncLaw가 law_updates에 pending으로 쌓고, 사용자가 승인해야 반영된다.
+// 감지된 개정은 syncLaw가 즉시 반영하고 law_updates(status='applied')에 as-is/to-be 로 기록한다.
 import cron from 'node-cron';
 import db from '../db.js';
 import { fetchLawArticles } from './lawApi.js';
 import { syncLaw } from './lawStore.js';
+import { getSetting, setSetting } from './settings.js';
 
-const CRON = process.env.LAW_CHECK_CRON || '30 6 * * *'; // 기본: 매일 06:30
+// 점검 주기(cron)는 설정(app_settings) → .env → 기본값 순. 설정에서 바꾸면 즉시 재예약된다.
+const DEFAULT_CRON = process.env.LAW_CHECK_CRON || '30 6 * * *'; // 기본: 매일 06:30
+let CRON = getSetting('law_check_cron') || DEFAULT_CRON;
 let task = null;
 let running = false;
 
@@ -50,17 +53,44 @@ export async function runCheckNow(actor = 'scheduler') {
   return summary;
 }
 
+// 자동 점검 on/off — 설정값(law_check_enabled). 없으면 기본 켜짐.
+function isEnabled() {
+  const v = getSetting('law_check_enabled');
+  return v == null ? true : v === '1' || v === 'true';
+}
+
 export function startScheduler() {
+  if (!isEnabled()) { console.log('[scheduler] 자동 점검 꺼짐(설정) — 예약하지 않음'); return; }
   if (!cron.validate(CRON)) { console.warn(`[scheduler] 잘못된 CRON: ${CRON}`); return; }
   task = cron.schedule(CRON, () => { runCheckNow('scheduler').catch(() => {}); });
   console.log(`[scheduler] 법령 점검 예약 · CRON="${CRON}" · OC=${process.env.LAW_API_OC ? '설정됨' : '미설정(수동만)'}`);
+}
+
+// 점검 주기 변경 — 유효성 검사 후 저장·재예약. 잘못된 표현식이면 예외를 던진다.
+export function rescheduleScheduler(newCron) {
+  const c = String(newCron || '').trim();
+  if (!cron.validate(c)) throw new Error('올바른 cron 표현식이 아닙니다 (분 시 일 월 요일)');
+  setSetting('law_check_cron', c);
+  CRON = c;
+  if (task) { task.stop(); task = null; }
+  startScheduler();   // 꺼짐 상태면 내부에서 예약하지 않는다
+  return schedulerInfo();
+}
+
+// 자동 점검 켜기/끄기 — 저장 후 즉시 예약/해제.
+export function setSchedulerEnabled(on) {
+  setSetting('law_check_enabled', on ? '1' : '0');
+  if (task) { task.stop(); task = null; }
+  if (on) startScheduler();
+  return schedulerInfo();
 }
 
 export function schedulerInfo() {
   const last = lastRunRow.get() || null;   // DB에서 — 재시작해도 유지
   return {
     cron: CRON,
-    enabled: !!task,
+    enabled: !!task,                 // 실제 예약된 태스크 존재 여부
+    scheduler_enabled: isEnabled(),  // 사용자 on/off 설정
     oc_configured: !!process.env.LAW_API_OC,
     running,
     // { actor, started_at, finished_at, checked, changed, added, errors } | null

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
+import { useAuth } from '../lib/auth.jsx';
 
 // 법령 관리 (요구사항 3·4) — 검색·수집, 조문 열람, 개정 추적 상태
 // cron을 사람이 읽는 문장으로. 해석 못 하면 원문을 그대로 보여준다.
@@ -44,8 +45,8 @@ function relTime(s) {
 }
 
 export default function Laws() {
-  const [tab, setTab] = useState('collect');   // collect | updates
-  const [pendingN, setPendingN] = useState(0);
+  const { canWrite } = useAuth();
+  const [tab, setTab] = useState('collect');   // collect | history
   const [q, setQ] = useState('');
   const [results, setResults] = useState(null);
   const [engine, setEngine] = useState(null);   // { engine, fallback } — 어느 검색 엔진이 응답했나
@@ -59,8 +60,7 @@ export default function Laws() {
 
   const loadCollected = () => api.lawList().then(setCollected);
   const loadSched = () => api.schedulerInfo().then(setSched).catch(() => {});
-  const loadPending = () => api.updatesCount().then((r) => setPendingN(r.c || 0)).catch(() => {});
-  useEffect(() => { loadCollected(); loadSched(); loadPending(); }, []);
+  useEffect(() => { loadCollected(); loadSched(); }, []);
 
   async function search() {
     setBusy('search'); setMsg(null); setResults(null); setEngine(null);
@@ -79,7 +79,7 @@ export default function Laws() {
     else setMsg({
       tone: r.changed > 0 ? 'warn' : 'pass',
       text: `${r.law_name || name} — 신규 ${r.added} · 변경 ${r.changed} · 동일 ${r.unchanged}`
-        + (r.changed > 0 ? ' · 변경분은 승인 큐에서 검토하세요' : ''),
+        + (r.changed > 0 ? ' · 변경분은 즉시 반영됨 (변경 이력 확인)' : ''),
     });
     setBusy('');
     loadCollected();
@@ -93,10 +93,10 @@ export default function Laws() {
     else setMsg({
       tone: r.changed > 0 ? 'warn' : 'pass',
       text: r.changed > 0
-        ? `업데이트 완료 — 개정 ${r.changed}건 감지 · 아래 ‘개정 승인’에서 검토하세요`
+        ? `업데이트 완료 — 개정 ${r.changed}건 자동 반영 · ‘변경 이력’에서 확인하세요`
         : `업데이트 완료 — 변경 없음 (법령 ${r.checked ?? 0}건 점검)`,
     });
-    loadCollected(); loadSched(); loadPending();
+    loadCollected(); loadSched();
   }
   async function toggleArticles(lawKey) {
     if (openKey === lawKey) { setOpenKey(null); return; }
@@ -111,12 +111,9 @@ export default function Laws() {
 
   return (
     <div className="grid" style={{ gap: 16 }}>
-      {/* 수집·승인·이력은 둘 다 '법령' 작업이라 한 화면에서 탭으로 가른다 (밑줄형 탭) */}
+      {/* 개정은 감지 즉시 자동 반영 — 승인 탭 없이 현황·이력 둘로만 가른다 (밑줄형 탭) */}
       <div className="ltabs">
         <button className={tab === 'collect' ? 'on' : ''} onClick={() => setTab('collect')}>법령 현황</button>
-        <button className={tab === 'updates' ? 'on' : ''} onClick={() => setTab('updates')}>
-          개정 승인{pendingN > 0 && <span className="segbadge">{pendingN}</span>}
-        </button>
         <button className={tab === 'history' ? 'on' : ''} onClick={() => setTab('history')}>변경 이력</button>
       </div>
 
@@ -138,7 +135,7 @@ export default function Laws() {
         <div className="au-top">
           <span className="au-ic">🔄</span>
           <div className="au-h">
-            <h2>법령 자동 업데이트</h2>
+            <h2>법령 업데이트</h2>
             <div className="sub">
               {sched && sched.enabled && sched.oc_configured
                 ? <>수집된 법령 {collected.length}건을 <b>{cronText(sched.cron)}</b> 자동 점검해 개정을 감지합니다.</>
@@ -146,9 +143,11 @@ export default function Laws() {
             </div>
           </div>
           <span className="spacer" />
-          <button className="btn primary" onClick={checkNow} disabled={busy === 'check' || !(sched && sched.oc_configured)}>
-            {busy === 'check' ? '업데이트 중…' : '🔄 지금 업데이트'}
-          </button>
+          {canWrite && (
+            <button className="btn primary" onClick={checkNow} disabled={busy === 'check' || !(sched && sched.oc_configured)}>
+              {busy === 'check' ? '업데이트 중…' : '🔄 지금 업데이트'}
+            </button>
+          )}
         </div>
 
         <div className="au-stats">
@@ -177,14 +176,6 @@ export default function Laws() {
             </span>
           </div>
         </div>
-
-        {pendingN > 0 && (
-          <button className="au-pending" onClick={() => setTab('updates')}>
-            <span className="badge draft"><i />개정 {pendingN}건 승인 대기</span>
-            <span className="txt">자동 감지된 변경입니다 — 검토 후 반영하세요</span>
-            <span className="go">검토하기 →</span>
-          </button>
-        )}
       </div>
 
       {/* ── 수동 검색·추가 (2차) — 새 법령을 추적 목록에 넣을 때만 편다 ── */}
@@ -263,7 +254,7 @@ export default function Laws() {
           </div>
           <span className="spacer" />
           <span className="tag">{collected.length}건</span>
-          {!showAdd && <button className="btn sm" style={{ marginLeft: 8 }} onClick={() => setShowAdd(true)}>＋ 법령 추가</button>}
+          {canWrite && !showAdd && <button className="btn sm" style={{ marginLeft: 8 }} onClick={() => setShowAdd(true)}>＋ 법령 추가</button>}
         </div>
         <div className="card-b" style={{ padding: 0 }}>
           {collected.length === 0
@@ -310,7 +301,6 @@ export default function Laws() {
       </div>
       </>}
 
-      {tab === 'updates' && <UpdatesPanel onChanged={() => { loadPending(); loadCollected(); }} />}
       {tab === 'history' && <HistoryPanel />}
     </div>
   );
@@ -322,8 +312,6 @@ export default function Laws() {
 const KIND = {
   collected: { label: '수집', verb: '수집' },
   updated: { label: '개정 반영', verb: '반영' },
-  detected: { label: '개정 감지', verb: '감지' },
-  rejected: { label: '반려', verb: '반려' },
 };
 const KEYS = Object.keys(KIND);
 const WD = ['일', '월', '화', '수', '목', '금', '토'];
@@ -432,36 +420,59 @@ function HistoryPanel() {
                       <span className="n">{list.length}건</span>
                     </div>
                     {list.map((g) => {
-                      const many = g.items.length > 1 || g.kind === 'collected';
                       const one = g.items[0];
+                      // 개정 반영은 단건이라도 펼쳐서 as-is/to-be 를 봐야 하므로 항상 확장 가능.
+                      const expandable = g.items.length > 1 || g.kind === 'collected' || g.kind === 'updated';
+                      // 단건 표기(조문 칩)로 보여줄지 — 개정 단건이면 칩으로.
+                      const single = g.items.length === 1 && g.kind !== 'collected';
                       const isOpen = open === g.key;
                       return (
-                        <div className={'hitem ' + g.kind + (many ? ' clickable' : '')} key={g.key}>
-                          <div className="h" onClick={() => many && setOpen(isOpen ? null : g.key)}>
+                        <div className={'hitem ' + g.kind + (expandable ? ' clickable' : '')} key={g.key}>
+                          <div className="h" onClick={() => expandable && setOpen(isOpen ? null : g.key)}>
                             <span className="tm">{g.at.slice(11, 16)}</span>
                             <span className="kind">{KIND[g.kind].label}</span>
                             <span className="txt">
                               <b>{g.law_name}</b>
-                              {many
-                                ? <> · 조문 <b>{g.n}개</b> {KIND[g.kind].verb}</>
-                                : <>
+                              {single
+                                ? <>
                                     {one.article_no && <span className="chip mono" style={{ marginLeft: 6 }}>{one.article_no}</span>}
                                     {one.article_title && <span className="muted" style={{ marginLeft: 6 }}>{one.article_title}</span>}
-                                  </>}
-                              {!many && detailLine(one)}
+                                  </>
+                                : <> · 조문 <b>{g.n}개</b> {KIND[g.kind].verb}</>}
+                              {single && detailLine(one)}
                             </span>
-                            {many && <span className="car">{isOpen ? '▴' : '▾'}</span>}
+                            {expandable && <span className="car">{isOpen ? '▴' : '▾'}</span>}
                           </div>
-                          {many && isOpen && (
+                          {expandable && isOpen && (
                             <div className="hsub">
-                              {g.items.map((e, i) => (
-                                <div className="r" key={i}>
-                                  {e.article_no
-                                    ? <><span className="no mono">{e.article_no}</span>
-                                        <span className="t">{e.article_title || '(제목 없음)'}</span></>
-                                    : <span className="t muted">조문 {e.n}개가 이 시각에 수집됐습니다.</span>}
-                                </div>
-                              ))}
+                              {g.kind === 'updated'
+                                ? g.items.map((e, i) => (
+                                    <div className="hdiff" key={i}>
+                                      <div className="hdiff-h">
+                                        {e.article_no && <span className="no mono">{e.article_no}</span>}
+                                        <span className="t">{e.article_title || '(제목 없음)'}</span>
+                                        {e.affected_rules > 0 && <span className="muted" style={{ fontSize: 11 }}>영향 룰 {e.affected_rules}</span>}
+                                      </div>
+                                      <div className="grid g-2" style={{ gap: 10 }}>
+                                        <div>
+                                          <div className="mini" style={{ color: 'var(--fail)' }}>as-is · 개정 전</div>
+                                          <pre className="diff old">{e.old_content || '—'}</pre>
+                                        </div>
+                                        <div>
+                                          <div className="mini" style={{ color: 'var(--pass)' }}>to-be · 개정 후</div>
+                                          <pre className="diff new">{e.new_content || '—'}</pre>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))
+                                : g.items.map((e, i) => (
+                                    <div className="r" key={i}>
+                                      {e.article_no
+                                        ? <><span className="no mono">{e.article_no}</span>
+                                            <span className="t">{e.article_title || '(제목 없음)'}</span></>
+                                        : <span className="t muted">조문 {e.n}개가 이 시각에 수집됐습니다.</span>}
+                                    </div>
+                                  ))}
                             </div>
                           )}
                         </div>
@@ -488,96 +499,8 @@ function detailLine(e) {
   if (e.actor) bits.push(<b key="a">{e.actor}</b>);
   if (e.affected_rules > 0) bits.push(<span key="r">영향 룰 {e.affected_rules}</span>);
   if (e.note) bits.push(<span key="n">“{e.note}”</span>);
-  if (e.kind === 'detected') bits.push(<span key="d">승인 대기</span>);
   if (!bits.length) return null;
   return <div className="sub">{bits.map((b, i) => <Fragment key={i}>{i > 0 && ' · '}{b}</Fragment>)}</div>;
-}
-
-/* 개정 승인 — 스케줄러가 감지한 개정을 사람이 승인해야 룰에 반영된다.
-   (구 /updates 화면을 법령 관리 탭으로 흡수) */
-const UST = [
-  { k: 'pending', label: '대기' },
-  { k: 'approved', label: '승인' },
-  { k: 'rejected', label: '반려' },
-];
-
-function UpdatesPanel({ onChanged }) {
-  const [status, setStatus] = useState('pending');
-  const [list, setList] = useState([]);
-  const [busy, setBusy] = useState(0);
-
-  const load = () => api.updates(status).then(setList);
-  useEffect(() => { load(); }, [status]);
-
-  async function approve(id) {
-    setBusy(id); await api.approveUpdate(id); setBusy(0);
-    load(); onChanged?.();
-  }
-  async function reject(id) {
-    const note = prompt('반려 사유(선택)') ?? '';
-    setBusy(id); await api.rejectUpdate(id, note); setBusy(0);
-    load(); onChanged?.();
-  }
-
-  return (
-    <div className="card">
-      <div className="card-h">
-        <div>
-          <h2>개정 승인</h2>
-          <div className="sub">
-            감지된 개정은 <b>승인해야</b> 법령 본문에 반영됩니다. 승인해도 룰 본문은 자동으로 바뀌지 않고, 참조 룰에 이력만 남습니다.
-          </div>
-        </div>
-        <span className="spacer" />
-        <div className="seg">
-          {UST.map((s) => (
-            <button key={s.k} className={status === s.k ? 'on' : ''} onClick={() => setStatus(s.k)}>{s.label}</button>
-          ))}
-        </div>
-      </div>
-      <div className="card-b" style={{ padding: 0 }}>
-        {list.length === 0
-          ? <div className="card-b muted">
-              {status === 'pending'
-                ? '대기 중인 개정이 없습니다. 위 ‘지금 점검’으로 즉시 확인할 수 있습니다.'
-                : `${UST.find((s) => s.k === status).label} 항목이 없습니다.`}
-            </div>
-          : list.map((u) => (
-              <div key={u.id} style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)' }}>
-                <div className="row" style={{ marginBottom: 10 }}>
-                  <b>{u.law_name}</b>
-                  <span className="chip mono">{u.article_no}</span>
-                  {u.article_title && <span className="muted">{u.article_title}</span>}
-                  <span className={'badge ' + (u.affected_rules > 0 ? 'draft' : 'published')}>
-                    <i />영향 룰 {u.affected_rules}
-                  </span>
-                  <span className="spacer" />
-                  <span className="muted mono" style={{ fontSize: 11 }}>{(u.detected_at || '').slice(0, 16)}</span>
-                  {status === 'pending' && (
-                    <>
-                      <button className="btn sm pass" disabled={busy === u.id} onClick={() => approve(u.id)}>✓ 승인</button>
-                      <button className="btn sm ghost" disabled={busy === u.id} onClick={() => reject(u.id)}>반려</button>
-                    </>
-                  )}
-                  {status !== 'pending' && u.reviewed_by && (
-                    <span className="muted" style={{ fontSize: 11.5 }}>by {u.reviewed_by}</span>
-                  )}
-                </div>
-                <div className="grid g-2" style={{ gap: 10 }}>
-                  <div>
-                    <div className="mini" style={{ color: 'var(--fail)' }}>개정 전</div>
-                    <pre className="diff old">{u.old_content}</pre>
-                  </div>
-                  <div>
-                    <div className="mini" style={{ color: 'var(--pass)' }}>개정 후</div>
-                    <pre className="diff new">{u.new_content}</pre>
-                  </div>
-                </div>
-              </div>
-            ))}
-      </div>
-    </div>
-  );
 }
 
 /* 조문 목록 — 73개를 스크롤로 뒤지지 않도록 검색·필터를 붙이고 본문을 펼쳐 볼 수 있게 한다 */

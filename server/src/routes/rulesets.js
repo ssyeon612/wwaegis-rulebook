@@ -96,15 +96,29 @@ async function autoCollectLaws(rules) {
   return summary;
 }
 
-router.post('/extract', upload.single('file'), async (req, res) => {
+router.post('/extract', upload.array('files', 20), async (req, res) => {
   try {
+    // 파일은 다중 업로드 지원 — 모두 파싱해 하나의 문서로 합쳐 분석한다.
+    // (내규·약관·사내 법령이 함께 올라올 수 있어 전부 분석 대상으로 삼는다)
+    const files = req.files || [];
     let content = req.body.text || '';
     let fname = req.body.name || '붙여넣기 내규';
     let format = 'text';
-    if (req.file) {
-      fname = fixFilename(req.file.originalname);
-      format = fname.split('.').pop().toLowerCase();
-      content = await parseFile(req.file.buffer, fname);
+    if (files.length) {
+      const parts = [];
+      for (const f of files) {
+        const nm = fixFilename(f.originalname);
+        const txt = await parseFile(f.buffer, nm);
+        if (txt && txt.trim()) parts.push(`[파일: ${nm}]\n${txt.trim()}`);   // [ 로 시작 → 청크에서 제외되는 구분 헤더
+      }
+      content = parts.join('\n\n');
+      if (files.length === 1) {
+        fname = fixFilename(files[0].originalname);
+        format = fname.split('.').pop().toLowerCase();
+      } else {
+        fname = `${fixFilename(files[0].originalname)} 외 ${files.length - 1}개`;
+        format = 'multi';
+      }
     }
     if (!content.trim()) {
       return res.status(422).json({ error: 'empty', message: '내용을 추출하지 못했습니다. PDF 스캔본이면 서버측 OCR가 필요합니다.' });
@@ -127,8 +141,9 @@ router.post('/extract', upload.single('file'), async (req, res) => {
       const pack = PACKS[analysis.domain];
       // 상품명이 있으면 STT 목록에 뜨는 이름으로 쓴다 — 없으면 도메인 기본명.
       const rsName = productName ? `${productName} 룰셋` : `${pack.label} 내규 룰셋`;
-      const rs = db.prepare('INSERT INTO rulesets (name, domain, engine, document_id, source_hint, product_name) VALUES (?,?,?,?,?,?)')
-        .run(rsName, analysis.domain, analysis.engine, docRow.lastInsertRowid, hint || null, productName || null);
+      // 룰셋 아이디(RSET…)는 생성 시점에 발급한다. (게시 때만 발급하던 버그 수정 — 게시 시엔 기존 값 유지)
+      const rs = db.prepare('INSERT INTO rulesets (name, domain, engine, document_id, source_hint, product_name, ruleset_id) VALUES (?,?,?,?,?,?,?)')
+        .run(rsName, analysis.domain, analysis.engine, docRow.lastInsertRowid, hint || null, productName || null, uid('RSET'));
       rulesetId = rs.lastInsertRowid;
     }
 
